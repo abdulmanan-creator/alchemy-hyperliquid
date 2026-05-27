@@ -1,0 +1,766 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Alchemy Hyperliquid — One line to trade Hyperliquid.</title>
+<meta name="description" content="A zero-custody REST builder API for trading on Hyperliquid. Perps, spot, HIP-3 and HIP-4 markets. Your keys never leave your machine." />
+<link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+
+<!-- ============================================================
+     1. STICKY NAV
+     ============================================================ -->
+<nav class="nav">
+  <div class="nav-inner">
+    <a href="#top" class="nav-brand">
+      <img src="assets/logo-wordmark-white.svg" alt="Alchemy" />
+      <span class="nav-divider"></span>
+      <span class="nav-sub">Hyperliquid</span>
+    </a>
+    <div class="nav-links">
+      <a class="nav-link" href="#quickstart">Docs</a>
+      <a class="nav-link active" href="#api">API</a>
+      <a class="nav-link nav-link-discord" href="#" aria-label="Discord">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M20.317 4.37a19.79 19.79 0 0 0-4.885-1.515.074.074 0 0 0-.079.037c-.21.375-.444.864-.608 1.25a18.27 18.27 0 0 0-5.487 0 12.64 12.64 0 0 0-.617-1.25.077.077 0 0 0-.079-.037A19.736 19.736 0 0 0 3.677 4.37a.07.07 0 0 0-.032.027C.533 9.046-.32 13.58.099 18.057a.082.082 0 0 0 .031.057 19.9 19.9 0 0 0 5.993 3.03.078.078 0 0 0 .084-.028c.462-.63.874-1.295 1.226-1.994a.076.076 0 0 0-.041-.106 13.107 13.107 0 0 1-1.872-.892.077.077 0 0 1-.008-.128c.126-.094.252-.192.372-.291a.074.074 0 0 1 .077-.01c3.928 1.793 8.18 1.793 12.062 0a.074.074 0 0 1 .078.009c.12.099.246.198.373.292a.077.077 0 0 1-.006.127 12.299 12.299 0 0 1-1.873.892.077.077 0 0 0-.041.107c.36.698.772 1.362 1.225 1.993a.076.076 0 0 0 .084.028 19.839 19.839 0 0 0 6.002-3.03.077.077 0 0 0 .032-.054c.5-5.177-.838-9.674-3.549-13.66a.061.061 0 0 0-.031-.028zM8.02 15.331c-1.183 0-2.157-1.085-2.157-2.419 0-1.333.956-2.418 2.157-2.418 1.21 0 2.176 1.094 2.157 2.418 0 1.334-.956 2.42-2.157 2.42zm7.974 0c-1.183 0-2.157-1.085-2.157-2.419 0-1.333.955-2.418 2.157-2.418 1.21 0 2.176 1.094 2.157 2.418 0 1.334-.946 2.42-2.157 2.42z"/></svg>
+        Discord
+      </a>
+      <a class="btn btn-primary btn-sm" href="approve.html" style="margin-left:8px">
+        Approve via Wallet
+        <svg class="btn-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
+      </a>
+    </div>
+  </div>
+</nav>
+
+<a id="top"></a>
+
+<!-- ============================================================
+     2. HERO
+     ============================================================ -->
+<section class="hero">
+  <div class="hero-inner narrow">
+
+    <div class="hero-eyebrow">
+      <span class="hero-eyebrow-tag">New</span>
+      Built on Alchemy infrastructure
+    </div>
+
+    <h1>One line to trade <span class="hl">Hyperliquid.</span></h1>
+    <p class="hero-sub">Your keys never leave your machine. Build with the SDK, sign locally, send through Alchemy.</p>
+
+    <div class="hero-ctas">
+      <a class="btn btn-primary btn-lg" href="#quickstart">
+        Get Started
+        <svg class="btn-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
+      </a>
+      <a class="btn btn-secondary btn-lg" href="approve.html">
+        Approve via Wallet
+      </a>
+    </div>
+
+    <div class="hero-pills">
+      <span class="pill blue">4 SDKs</span>
+      <span class="pill">Zero custody</span>
+      <span class="pill cyan">Perps &amp; Spot</span>
+      <span class="pill violet">HIP-3 &amp; HIP-4 Markets</span>
+    </div>
+
+    <!-- Code centerpiece -->
+    <div class="codeblock" id="quickstart" data-snippet>
+      <div class="code-tabs" role="tablist">
+        <button class="code-tab" data-lang="python" role="tab">python</button>
+        <button class="code-tab active" data-lang="ts" role="tab">typescript</button>
+        <button class="code-tab" data-lang="rust" role="tab">rust</button>
+        <button class="code-tab" data-lang="go" role="tab">go</button>
+        <div class="code-traffic" aria-hidden="true"><span></span><span></span><span></span></div>
+      </div>
+      <div class="code-body">
+        <button class="code-copy" data-copy aria-label="Copy code">
+          <svg viewBox="0 0 24 24" aria-hidden="true" class="ic-copy"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg>
+          <svg viewBox="0 0 24 24" aria-hidden="true" class="ic-check" style="display:none"><path d="M5 12l5 5L20 7"/></svg>
+        </button>
+
+        <pre data-pane="ts"><code><span class="tok-kw">import</span> <span class="tok-pun">{ </span><span class="tok-id">Alchemy</span><span class="tok-pun"> }</span> <span class="tok-kw">from</span> <span class="tok-str">"@alchemy/hyperliquid"</span><span class="tok-pun">;</span>
+<span class="tok-kw">const</span> <span class="tok-id">sdk</span> <span class="tok-pun">=</span> <span class="tok-kw">new</span> <span class="tok-fn">Alchemy</span><span class="tok-pun">({ </span><span class="tok-id">privateKey</span><span class="tok-pun">: </span><span class="tok-id">process</span><span class="tok-pun">.</span><span class="tok-id">env</span><span class="tok-pun">.</span><span class="tok-id">PK</span><span class="tok-pun"> });</span>
+<span class="tok-com">// Market buy $100 of BTC</span>
+<span class="tok-kw">const</span> <span class="tok-id">order</span> <span class="tok-pun">=</span> <span class="tok-kw">await</span> <span class="tok-id">sdk</span><span class="tok-pun">.</span><span class="tok-fn">marketBuy</span><span class="tok-pun">(</span><span class="tok-str">"BTC"</span><span class="tok-pun">, { </span><span class="tok-id">notional</span><span class="tok-pun">: </span><span class="tok-num">100</span><span class="tok-pun"> });</span>
+<span class="tok-id">console</span><span class="tok-pun">.</span><span class="tok-fn">log</span><span class="tok-pun">(</span><span class="tok-str">`Filled ${</span><span class="tok-id">order</span><span class="tok-pun">.</span><span class="tok-id">filledSize</span><span class="tok-str">} @ $${</span><span class="tok-id">order</span><span class="tok-pun">.</span><span class="tok-id">avgPrice</span><span class="tok-str">}`</span><span class="tok-pun">);</span></code></pre>
+
+        <pre data-pane="python" style="display:none"><code><span class="tok-kw">from</span> <span class="tok-mod">alchemy_hyperliquid</span> <span class="tok-kw">import</span> <span class="tok-id">Alchemy</span>
+<span class="tok-id">sdk</span> <span class="tok-pun">=</span> <span class="tok-fn">Alchemy</span><span class="tok-pun">(</span><span class="tok-id">private_key</span><span class="tok-pun">=</span><span class="tok-id">key</span><span class="tok-pun">)</span>
+<span class="tok-com"># Market buy $100 of BTC</span>
+<span class="tok-id">order</span> <span class="tok-pun">=</span> <span class="tok-id">sdk</span><span class="tok-pun">.</span><span class="tok-fn">market_buy</span><span class="tok-pun">(</span><span class="tok-str">"BTC"</span><span class="tok-pun">, </span><span class="tok-id">notional</span><span class="tok-pun">=</span><span class="tok-num">100</span><span class="tok-pun">)</span>
+<span class="tok-fn">print</span><span class="tok-pun">(</span><span class="tok-str">f"Filled {order.filled_size} @ ${order.avg_price}"</span><span class="tok-pun">)</span></code></pre>
+
+        <pre data-pane="rust" style="display:none"><code><span class="tok-kw">use</span> <span class="tok-mod">alchemy_hyperliquid</span><span class="tok-pun">::</span><span class="tok-id">Alchemy</span><span class="tok-pun">;</span>
+<span class="tok-kw">let</span> <span class="tok-id">sdk</span> <span class="tok-pun">=</span> <span class="tok-id">Alchemy</span><span class="tok-pun">::</span><span class="tok-fn">new</span><span class="tok-pun">(</span><span class="tok-id">env</span><span class="tok-pun">!(</span><span class="tok-str">"PK"</span><span class="tok-pun">));</span>
+<span class="tok-com">// Market buy $100 of BTC</span>
+<span class="tok-kw">let</span> <span class="tok-id">order</span> <span class="tok-pun">=</span> <span class="tok-id">sdk</span><span class="tok-pun">.</span><span class="tok-fn">market_buy</span><span class="tok-pun">(</span><span class="tok-str">"BTC"</span><span class="tok-pun">, </span><span class="tok-id">Notional</span><span class="tok-pun">(</span><span class="tok-num">100</span><span class="tok-pun">)).</span><span class="tok-fn">await</span><span class="tok-pun">?;</span>
+<span class="tok-fn">println!</span><span class="tok-pun">(</span><span class="tok-str">"Filled {} @ ${}"</span><span class="tok-pun">, </span><span class="tok-id">order</span><span class="tok-pun">.</span><span class="tok-id">filled_size</span><span class="tok-pun">, </span><span class="tok-id">order</span><span class="tok-pun">.</span><span class="tok-id">avg_price</span><span class="tok-pun">);</span></code></pre>
+
+        <pre data-pane="go" style="display:none"><code><span class="tok-kw">import</span> <span class="tok-str">"github.com/alchemyplatform/hyperliquid-go"</span>
+<span class="tok-id">sdk</span> <span class="tok-pun">:=</span> <span class="tok-id">hyperliquid</span><span class="tok-pun">.</span><span class="tok-fn">New</span><span class="tok-pun">(</span><span class="tok-id">os</span><span class="tok-pun">.</span><span class="tok-fn">Getenv</span><span class="tok-pun">(</span><span class="tok-str">"PK"</span><span class="tok-pun">))</span>
+<span class="tok-com">// Market buy $100 of BTC</span>
+<span class="tok-id">order</span><span class="tok-pun">, _ :=</span> <span class="tok-id">sdk</span><span class="tok-pun">.</span><span class="tok-fn">MarketBuy</span><span class="tok-pun">(</span><span class="tok-str">"BTC"</span><span class="tok-pun">, &amp;</span><span class="tok-id">hyperliquid</span><span class="tok-pun">.</span><span class="tok-id">Opts</span><span class="tok-pun">{</span><span class="tok-id">Notional</span><span class="tok-pun">: </span><span class="tok-num">100</span><span class="tok-pun">})</span>
+<span class="tok-id">fmt</span><span class="tok-pun">.</span><span class="tok-fn">Printf</span><span class="tok-pun">(</span><span class="tok-str">"Filled %v @ $%v\n"</span><span class="tok-pun">, </span><span class="tok-id">order</span><span class="tok-pun">.</span><span class="tok-id">FilledSize</span><span class="tok-pun">, </span><span class="tok-id">order</span><span class="tok-pun">.</span><span class="tok-id">AvgPrice</span><span class="tok-pun">)</span></code></pre>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============================================================
+     3. FEATURE GRID
+     ============================================================ -->
+<section class="section" id="features">
+  <div class="container">
+    <div class="section-header">
+      <span class="eyebrow">Everything you need</span>
+      <h2>From a single line of code to advanced execution.</h2>
+      <p>Six primitives cover most of what a trading agent or bot will need. The full SDK surfaces the rest.</p>
+    </div>
+
+    <div class="feature-grid">
+      <div class="feature-card">
+        <span class="feature-icon"><svg viewBox="0 0 24 24"><path d="M5 12h14M13 6l6 6-6 6"/></svg></span>
+        <h3>One-Line Trading</h3>
+        <p>Market buy or sell by ticker. No order builder, no signing dance — the SDK handles it end-to-end.</p>
+        <div class="feature-snippet">sdk.marketBuy("BTC", { notional: 100 })</div>
+      </div>
+
+      <div class="feature-card">
+        <span class="feature-icon"><svg viewBox="0 0 24 24"><rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V8a4 4 0 1 1 8 0v3"/></svg></span>
+        <h3>Zero Custody</h3>
+        <p>Private keys are signed locally and never transit our servers. We see signed payloads, not secrets.</p>
+        <div class="feature-snippet">// Private key stays local</div>
+      </div>
+
+      <div class="feature-card">
+        <span class="feature-icon"><svg viewBox="0 0 24 24"><path d="M4 12a8 8 0 0 1 16 0M4 12a8 8 0 0 0 16 0M4 12h16"/></svg></span>
+        <h3>Real-Time Streaming</h3>
+        <p>WebSocket subscriptions for trades, book updates, fills, and account state — auto-reconnect included.</p>
+        <div class="feature-snippet">sdk.stream.trades(["BTC"], cb)</div>
+      </div>
+
+      <div class="feature-card">
+        <span class="feature-icon"><svg viewBox="0 0 24 24"><path d="M4 19V5M4 19h16M8 15v-4M12 15V8M16 15v-6"/></svg></span>
+        <h3>Full Market Data</h3>
+        <p>L2 books, candles, funding history, mark and oracle prices. Block-perfect, delivered by Alchemy.</p>
+        <div class="feature-snippet">sdk.info.l2Book("ETH")</div>
+      </div>
+
+      <div class="feature-card">
+        <span class="feature-icon"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><path d="M12 4v16M4 12h16"/></svg></span>
+        <h3>HIP-3 Markets</h3>
+        <p>Permissionless market dexes from any builder. Address them as <code>dex:SYMBOL</code> and trade the same way.</p>
+        <div class="feature-snippet">sdk.buy("xyz:SILVER", { notional: 11 })</div>
+      </div>
+
+      <div class="feature-card">
+        <span class="feature-icon"><svg viewBox="0 0 24 24"><path d="M4 6h10M4 12h16M4 18h7"/><circle cx="18" cy="6" r="2"/><circle cx="14" cy="18" r="2"/></svg></span>
+        <h3>Advanced Orders</h3>
+        <p>TWAP, scale, post-only, reduce-only, IOC, ALO, and trigger orders — all behind ergonomic primitives.</p>
+        <div class="feature-snippet">sdk.twapOrder("BTC", { size: 0.1 })</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============================================================
+     4. REST API
+     ============================================================ -->
+<section class="section" id="api">
+  <div class="container">
+    <div class="section-header">
+      <span class="eyebrow">REST API</span>
+      <h2>Build without signature, send with signature.</h2>
+      <p>Click any endpoint to inspect the schema, see the response shape, and run a curl example.</p>
+    </div>
+
+    <div class="api-groups">
+
+      <!-- Group A: Build (no signature) -->
+      <div class="api-group">
+        <div class="api-group-header">
+          <h3>Exchange — Build (no signature)</h3>
+          <span class="grp-tag">6 endpoints · no auth</span>
+        </div>
+        <div class="endpoint-list">
+
+          <article class="endpoint">
+            <header class="endpoint-head"><span class="verb verb-post">POST</span><span class="endpoint-path">/exchange</span><span class="endpoint-title">Build Order</span><span class="endpoint-tryit">TRY IT</span></header>
+            <div class="endpoint-body">
+              <p class="endpoint-desc">Construct a typed-data order payload ready to be signed in the user's wallet. No signature is performed server-side — the response is the exact EIP-712 message you'll sign before calling <code>Send Order</code>.</p>
+              <table class="field-table">
+                <thead><tr><th>Field</th><th>Type</th><th>Description</th></tr></thead>
+                <tbody>
+                  <tr><td class="field-name">action.orders[].asset</td><td class="field-type">number</td><td>Asset id, e.g. <code>0</code> for BTC perp. Use <code>info.meta</code> to resolve.</td></tr>
+                  <tr><td class="field-name">action.orders[].side</td><td class="field-type">"buy" | "sell"</td><td>Order side.</td></tr>
+                  <tr><td class="field-name">action.orders[].price</td><td class="field-type">string</td><td>Limit price as a decimal string. <span class="opt">Optional for IOC.</span></td></tr>
+                  <tr><td class="field-name">action.orders[].size</td><td class="field-type">string</td><td>Order size in base units.</td></tr>
+                  <tr><td class="field-name">action.orders[].tif</td><td class="field-type">"Alo" | "Gtc" | "Ioc"</td><td>Time-in-force. ALO is post-only.</td></tr>
+                  <tr><td class="field-name">vaultAddress</td><td class="field-type">string <span class="opt">opt.</span></td><td>Trade on behalf of a vault.</td></tr>
+                </tbody>
+              </table>
+              <div class="returns"><span class="returns-label">Returns</span><code>{ typedData: EIP712, nonce: number, builderFee: { rate, max } }</code></div>
+              <div class="tryit-bar"><button class="tryit-toggle" data-tryit>$ curl</button></div>
+              <div class="tryit-panel">
+                <div class="tryit-head"><span>POST https://api.alchemy.com/hyperliquid/exchange</span><button class="btn-run">▶ Run</button></div>
+                <pre class="tryit-curl">curl -X POST https://api.alchemy.com/hyperliquid/exchange \
+  -H "Content-Type: application/json" \
+  -d '{
+    "type": "build",
+    "action": {
+      "type": "order",
+      "orders": [{ "asset": 0, "side": "buy", "price": "62500", "size": "0.001", "tif": "Gtc" }]
+    },
+    "wallet": "0xAbC…"
+  }'</pre>
+              </div>
+            </div>
+          </article>
+
+          <article class="endpoint">
+            <header class="endpoint-head"><span class="verb verb-post">POST</span><span class="endpoint-path">/exchange</span><span class="endpoint-title">Build Market Order</span><span class="endpoint-tryit">TRY IT</span></header>
+            <div class="endpoint-body">
+              <p class="endpoint-desc">Build a market order with intelligent slippage protection. Submit a target notional or size and the endpoint computes a marketable limit price from the current book, attaching the builder fee.</p>
+              <table class="field-table">
+                <thead><tr><th>Field</th><th>Type</th><th>Description</th></tr></thead>
+                <tbody>
+                  <tr><td class="field-name">action.orders[].asset</td><td class="field-type">number</td><td>Asset id to trade.</td></tr>
+                  <tr><td class="field-name">action.orders[].side</td><td class="field-type">"buy" | "sell"</td><td>Direction of the trade.</td></tr>
+                  <tr><td class="field-name">action.orders[].notional</td><td class="field-type">string <span class="opt">opt.</span></td><td>USD notional to fill. Mutually exclusive with <code>size</code>.</td></tr>
+                  <tr><td class="field-name">action.orders[].size</td><td class="field-type">string <span class="opt">opt.</span></td><td>Size in base units.</td></tr>
+                  <tr><td class="field-name">slippageBps</td><td class="field-type">number <span class="opt">opt.</span></td><td>Max acceptable slippage in basis points. Default 50.</td></tr>
+                </tbody>
+              </table>
+              <div class="returns"><span class="returns-label">Returns</span><code>{ typedData, nonce, limitPrice, estimatedFill }</code></div>
+              <div class="tryit-bar"><button class="tryit-toggle" data-tryit>$ curl</button></div>
+              <div class="tryit-panel">
+                <div class="tryit-head"><span>POST https://api.alchemy.com/hyperliquid/exchange</span><button class="btn-run">▶ Run</button></div>
+                <pre class="tryit-curl">curl -X POST https://api.alchemy.com/hyperliquid/exchange \
+  -d '{ "type":"buildMarket", "action": { "orders": [{ "asset":0, "side":"buy", "notional":"100" }] } }'</pre>
+              </div>
+            </div>
+          </article>
+
+          <article class="endpoint">
+            <header class="endpoint-head"><span class="verb verb-post">POST</span><span class="endpoint-path">/exchange</span><span class="endpoint-title">Build Cancel</span><span class="endpoint-tryit">TRY IT</span></header>
+            <div class="endpoint-body">
+              <p class="endpoint-desc">Build a cancellation payload for one or more resting orders by order id (OID) or client order id (CLOID). Returns typed data ready for the user's signature.</p>
+              <table class="field-table">
+                <thead><tr><th>Field</th><th>Type</th><th>Description</th></tr></thead>
+                <tbody>
+                  <tr><td class="field-name">action.cancels[].asset</td><td class="field-type">number</td><td>Asset id of the order being cancelled.</td></tr>
+                  <tr><td class="field-name">action.cancels[].oid</td><td class="field-type">number <span class="opt">opt.</span></td><td>On-chain order id.</td></tr>
+                  <tr><td class="field-name">action.cancels[].cloid</td><td class="field-type">string <span class="opt">opt.</span></td><td>Client-side order id (32-byte hex).</td></tr>
+                </tbody>
+              </table>
+              <div class="returns"><span class="returns-label">Returns</span><code>{ typedData, nonce }</code></div>
+              <div class="tryit-bar"><button class="tryit-toggle" data-tryit>$ curl</button></div>
+              <div class="tryit-panel">
+                <div class="tryit-head"><span>POST https://api.alchemy.com/hyperliquid/exchange</span><button class="btn-run">▶ Run</button></div>
+                <pre class="tryit-curl">curl -X POST https://api.alchemy.com/hyperliquid/exchange \
+  -d '{ "type":"buildCancel", "action": { "cancels":[{ "asset":0, "oid":1234567 }] } }'</pre>
+              </div>
+            </div>
+          </article>
+
+          <article class="endpoint">
+            <header class="endpoint-head"><span class="verb verb-post">POST</span><span class="endpoint-path">/exchange</span><span class="endpoint-title">Build Modify</span><span class="endpoint-tryit">TRY IT</span></header>
+            <div class="endpoint-body">
+              <p class="endpoint-desc">Build a modification payload that replaces an existing order in-place — preserving queue priority where the protocol allows it. Pass the new price and/or size.</p>
+              <table class="field-table">
+                <thead><tr><th>Field</th><th>Type</th><th>Description</th></tr></thead>
+                <tbody>
+                  <tr><td class="field-name">action.modifies[].oid</td><td class="field-type">number</td><td>Order to modify.</td></tr>
+                  <tr><td class="field-name">action.modifies[].order.price</td><td class="field-type">string</td><td>New limit price.</td></tr>
+                  <tr><td class="field-name">action.modifies[].order.size</td><td class="field-type">string</td><td>New size.</td></tr>
+                  <tr><td class="field-name">action.modifies[].order.tif</td><td class="field-type">enum</td><td>Time-in-force to keep or change.</td></tr>
+                </tbody>
+              </table>
+              <div class="returns"><span class="returns-label">Returns</span><code>{ typedData, nonce }</code></div>
+              <div class="tryit-bar"><button class="tryit-toggle" data-tryit>$ curl</button></div>
+              <div class="tryit-panel">
+                <div class="tryit-head"><span>POST https://api.alchemy.com/hyperliquid/exchange</span><button class="btn-run">▶ Run</button></div>
+                <pre class="tryit-curl">curl -X POST https://api.alchemy.com/hyperliquid/exchange \
+  -d '{ "type":"buildModify", "action": { "modifies":[{ "oid":1234567, "order":{ "price":"62800", "size":"0.001", "tif":"Gtc" }}]}}'</pre>
+              </div>
+            </div>
+          </article>
+
+          <article class="endpoint">
+            <header class="endpoint-head"><span class="verb verb-post">POST</span><span class="endpoint-path">/exchange</span><span class="endpoint-title">Build Approval (approveBuilderFee)</span><span class="endpoint-tryit">TRY IT</span></header>
+            <div class="endpoint-body">
+              <p class="endpoint-desc">Build the one-time EIP-712 payload that authorises Alchemy as a builder for the connected wallet. The user signs it once to set their <code>maxFeeRate</code> ceiling — every subsequent order's builder fee falls inside that ceiling.</p>
+              <table class="field-table">
+                <thead><tr><th>Field</th><th>Type</th><th>Description</th></tr></thead>
+                <tbody>
+                  <tr><td class="field-name">action.builder</td><td class="field-type">address</td><td>Alchemy's builder address (auto-filled).</td></tr>
+                  <tr><td class="field-name">action.maxFeeRate</td><td class="field-type">string</td><td>Ceiling as a percent, e.g. <code>"1%"</code>. The actual fee on each order will be lower.</td></tr>
+                  <tr><td class="field-name">wallet</td><td class="field-type">address</td><td>The user wallet granting the approval.</td></tr>
+                </tbody>
+              </table>
+              <div class="returns"><span class="returns-label">Returns</span><code>{ typedData: EIP712, nonce, expiresAt }</code></div>
+              <div class="tryit-bar"><button class="tryit-toggle" data-tryit>$ curl</button></div>
+              <div class="tryit-panel">
+                <div class="tryit-head"><span>POST https://api.alchemy.com/hyperliquid/exchange</span><button class="btn-run">▶ Run</button></div>
+                <pre class="tryit-curl">curl -X POST https://api.alchemy.com/hyperliquid/exchange \
+  -d '{ "type":"buildApproval", "action": { "maxFeeRate":"1%" }, "wallet":"0xAbC…" }'</pre>
+              </div>
+            </div>
+          </article>
+
+          <article class="endpoint">
+            <header class="endpoint-head"><span class="verb verb-post">POST</span><span class="endpoint-path">/exchange</span><span class="endpoint-title">Build Revoke</span><span class="endpoint-tryit">TRY IT</span></header>
+            <div class="endpoint-body">
+              <p class="endpoint-desc">Build the payload to revoke Alchemy as a builder. Once signed and sent, no further orders for this wallet will be authorised to include the builder fee.</p>
+              <table class="field-table">
+                <thead><tr><th>Field</th><th>Type</th><th>Description</th></tr></thead>
+                <tbody>
+                  <tr><td class="field-name">action.builder</td><td class="field-type">address</td><td>Alchemy's builder address to revoke.</td></tr>
+                  <tr><td class="field-name">wallet</td><td class="field-type">address</td><td>The user wallet revoking the approval.</td></tr>
+                </tbody>
+              </table>
+              <div class="returns"><span class="returns-label">Returns</span><code>{ typedData, nonce }</code></div>
+              <div class="tryit-bar"><button class="tryit-toggle" data-tryit>$ curl</button></div>
+              <div class="tryit-panel">
+                <div class="tryit-head"><span>POST https://api.alchemy.com/hyperliquid/exchange</span><button class="btn-run">▶ Run</button></div>
+                <pre class="tryit-curl">curl -X POST https://api.alchemy.com/hyperliquid/exchange \
+  -d '{ "type":"buildRevoke", "wallet":"0xAbC…" }'</pre>
+              </div>
+            </div>
+          </article>
+
+        </div>
+      </div>
+
+      <!-- Group B: Send (with signature) -->
+      <div class="api-group">
+        <div class="api-group-header">
+          <h3>Exchange — Send (with signature)</h3>
+          <span class="grp-tag">4 endpoints · signed</span>
+        </div>
+        <div class="endpoint-list">
+
+          <article class="endpoint">
+            <header class="endpoint-head"><span class="verb verb-post">POST</span><span class="endpoint-path">/exchange</span><span class="endpoint-title">Send Order</span><span class="endpoint-tryit">TRY IT</span></header>
+            <div class="endpoint-body">
+              <p class="endpoint-desc">Submit a previously-built order along with its EIP-712 signature. Alchemy verifies the signature locally, injects the builder fee field, and forwards to Hyperliquid. The response includes the on-chain fill if matched immediately.</p>
+              <table class="field-table">
+                <thead><tr><th>Field</th><th>Type</th><th>Description</th></tr></thead>
+                <tbody>
+                  <tr><td class="field-name">action</td><td class="field-type">object</td><td>The original built action, unchanged.</td></tr>
+                  <tr><td class="field-name">signature</td><td class="field-type">{ r, s, v }</td><td>EIP-712 signature over the typed data.</td></tr>
+                  <tr><td class="field-name">nonce</td><td class="field-type">number</td><td>Nonce from the build step.</td></tr>
+                  <tr><td class="field-name">vaultAddress</td><td class="field-type">string <span class="opt">opt.</span></td><td>Vault address if trading on behalf of one.</td></tr>
+                </tbody>
+              </table>
+              <div class="returns"><span class="returns-label">Returns</span><code>{ status:"ok", response:{ data:{ statuses:[{ filled?, resting? }]}}}</code></div>
+              <div class="tryit-bar"><button class="tryit-toggle" data-tryit>$ curl</button></div>
+              <div class="tryit-panel">
+                <div class="tryit-head"><span>POST https://api.alchemy.com/hyperliquid/exchange</span><button class="btn-run">▶ Run</button></div>
+                <pre class="tryit-curl">curl -X POST https://api.alchemy.com/hyperliquid/exchange \
+  -d '{ "type":"send", "action": {…}, "signature": {"r":"0x…","s":"0x…","v":27}, "nonce": 1716830000000 }'</pre>
+              </div>
+            </div>
+          </article>
+
+          <article class="endpoint">
+            <header class="endpoint-head"><span class="verb verb-post">POST</span><span class="endpoint-path">/exchange</span><span class="endpoint-title">Send Cancel</span><span class="endpoint-tryit">TRY IT</span></header>
+            <div class="endpoint-body">
+              <p class="endpoint-desc">Submit a signed cancel. Idempotent for already-filled orders.</p>
+              <table class="field-table">
+                <thead><tr><th>Field</th><th>Type</th><th>Description</th></tr></thead>
+                <tbody>
+                  <tr><td class="field-name">action.cancels[]</td><td class="field-type">array</td><td>Cancels from the build step.</td></tr>
+                  <tr><td class="field-name">signature</td><td class="field-type">{ r, s, v }</td><td>EIP-712 signature.</td></tr>
+                  <tr><td class="field-name">nonce</td><td class="field-type">number</td><td>Nonce from build.</td></tr>
+                </tbody>
+              </table>
+              <div class="returns"><span class="returns-label">Returns</span><code>{ status:"ok", response:{ data:{ statuses:["success" | "alreadyFilled" | "unknown"]}}}</code></div>
+              <div class="tryit-bar"><button class="tryit-toggle" data-tryit>$ curl</button></div>
+              <div class="tryit-panel">
+                <div class="tryit-head"><span>POST https://api.alchemy.com/hyperliquid/exchange</span><button class="btn-run">▶ Run</button></div>
+                <pre class="tryit-curl">curl -X POST https://api.alchemy.com/hyperliquid/exchange -d '{ "type":"sendCancel", … }'</pre>
+              </div>
+            </div>
+          </article>
+
+          <article class="endpoint">
+            <header class="endpoint-head"><span class="verb verb-post">POST</span><span class="endpoint-path">/exchange</span><span class="endpoint-title">Send Modify</span><span class="endpoint-tryit">TRY IT</span></header>
+            <div class="endpoint-body">
+              <p class="endpoint-desc">Submit a signed modification. Useful for market-making bots that reprice frequently without losing queue position when possible.</p>
+              <table class="field-table">
+                <thead><tr><th>Field</th><th>Type</th><th>Description</th></tr></thead>
+                <tbody>
+                  <tr><td class="field-name">action.modifies[]</td><td class="field-type">array</td><td>Modifications from build.</td></tr>
+                  <tr><td class="field-name">signature</td><td class="field-type">{ r, s, v }</td><td>EIP-712 signature.</td></tr>
+                  <tr><td class="field-name">nonce</td><td class="field-type">number</td><td>Nonce from build.</td></tr>
+                </tbody>
+              </table>
+              <div class="returns"><span class="returns-label">Returns</span><code>{ status:"ok", response:{ data:{ statuses:[{ resting?, filled? }]}}}</code></div>
+              <div class="tryit-bar"><button class="tryit-toggle" data-tryit>$ curl</button></div>
+              <div class="tryit-panel">
+                <div class="tryit-head"><span>POST https://api.alchemy.com/hyperliquid/exchange</span><button class="btn-run">▶ Run</button></div>
+                <pre class="tryit-curl">curl -X POST https://api.alchemy.com/hyperliquid/exchange -d '{ "type":"sendModify", … }'</pre>
+              </div>
+            </div>
+          </article>
+
+          <article class="endpoint">
+            <header class="endpoint-head"><span class="verb verb-post">POST</span><span class="endpoint-path">/exchange</span><span class="endpoint-title">Send Approval</span><span class="endpoint-tryit">TRY IT</span></header>
+            <div class="endpoint-body">
+              <p class="endpoint-desc">Submit the signed <code>approveBuilderFee</code> payload. Once accepted, the wallet is approved and subsequent orders auto-include the builder fee within the user's <code>maxFeeRate</code> ceiling.</p>
+              <table class="field-table">
+                <thead><tr><th>Field</th><th>Type</th><th>Description</th></tr></thead>
+                <tbody>
+                  <tr><td class="field-name">action.builder</td><td class="field-type">address</td><td>Alchemy's builder address.</td></tr>
+                  <tr><td class="field-name">action.maxFeeRate</td><td class="field-type">string</td><td>Approved ceiling.</td></tr>
+                  <tr><td class="field-name">signature</td><td class="field-type">{ r, s, v }</td><td>EIP-712 signature.</td></tr>
+                </tbody>
+              </table>
+              <div class="returns"><span class="returns-label">Returns</span><code>{ status:"ok", approval:{ active:true, maxFeeRate, approvedAt }}</code></div>
+              <div class="tryit-bar"><button class="tryit-toggle" data-tryit>$ curl</button></div>
+              <div class="tryit-panel">
+                <div class="tryit-head"><span>POST https://api.alchemy.com/hyperliquid/exchange</span><button class="btn-run">▶ Run</button></div>
+                <pre class="tryit-curl">curl -X POST https://api.alchemy.com/hyperliquid/exchange -d '{ "type":"sendApproval", … }'</pre>
+              </div>
+            </div>
+          </article>
+
+        </div>
+      </div>
+
+      <!-- Group C: Enhanced -->
+      <div class="api-group">
+        <div class="api-group-header">
+          <h3>Enhanced Endpoints</h3>
+          <span class="grp-tag">6 endpoints · convenience</span>
+        </div>
+        <div class="endpoint-list">
+
+          <article class="endpoint">
+            <header class="endpoint-head"><span class="verb verb-get">GET</span><span class="endpoint-path">/approval</span><span class="endpoint-title">Check Approval</span><span class="endpoint-tryit">TRY IT</span></header>
+            <div class="endpoint-body">
+              <p class="endpoint-desc">Check whether a wallet has approved Alchemy as a builder, and at what ceiling. Useful for gating order entry in your UI.</p>
+              <table class="field-table">
+                <thead><tr><th>Field</th><th>Type</th><th>Description</th></tr></thead>
+                <tbody>
+                  <tr><td class="field-name">?wallet</td><td class="field-type">address</td><td>Wallet to check (query string).</td></tr>
+                </tbody>
+              </table>
+              <div class="returns"><span class="returns-label">Returns</span><code>{ approved: boolean, maxFeeRate?: string, approvedAt?: number }</code></div>
+              <div class="tryit-bar"><button class="tryit-toggle" data-tryit>$ curl</button></div>
+              <div class="tryit-panel">
+                <div class="tryit-head"><span>GET https://api.alchemy.com/hyperliquid/approval?wallet=…</span><button class="btn-run">▶ Run</button></div>
+                <pre class="tryit-curl">curl https://api.alchemy.com/hyperliquid/approval?wallet=0xAbC…</pre>
+              </div>
+            </div>
+          </article>
+
+          <article class="endpoint">
+            <header class="endpoint-head"><span class="verb verb-post">POST</span><span class="endpoint-path">/openOrders</span><span class="endpoint-title">Open Orders (with pre-built cancel actions)</span><span class="endpoint-tryit">TRY IT</span></header>
+            <div class="endpoint-body">
+              <p class="endpoint-desc">List a wallet's resting orders. Unlike the vanilla endpoint, the response also includes pre-built cancel payloads — sign and submit to cancel any subset without re-fetching state.</p>
+              <table class="field-table">
+                <thead><tr><th>Field</th><th>Type</th><th>Description</th></tr></thead>
+                <tbody>
+                  <tr><td class="field-name">user</td><td class="field-type">address</td><td>Wallet to query.</td></tr>
+                  <tr><td class="field-name">asset</td><td class="field-type">number <span class="opt">opt.</span></td><td>Filter by asset.</td></tr>
+                </tbody>
+              </table>
+              <div class="returns"><span class="returns-label">Returns</span><code>{ orders: Order[], cancelActions: Record&lt;oid, BuiltCancel&gt; }</code></div>
+              <div class="tryit-bar"><button class="tryit-toggle" data-tryit>$ curl</button></div>
+              <div class="tryit-panel">
+                <div class="tryit-head"><span>POST https://api.alchemy.com/hyperliquid/openOrders</span><button class="btn-run">▶ Run</button></div>
+                <pre class="tryit-curl">curl -X POST https://api.alchemy.com/hyperliquid/openOrders -d '{ "user":"0xAbC…" }'</pre>
+              </div>
+            </div>
+          </article>
+
+          <article class="endpoint">
+            <header class="endpoint-head"><span class="verb verb-post">POST</span><span class="endpoint-path">/orderStatus</span><span class="endpoint-title">Order Status</span><span class="endpoint-tryit">TRY IT</span></header>
+            <div class="endpoint-body">
+              <p class="endpoint-desc">Look up the lifecycle status of an order by OID or CLOID — useful for reconciliation after a network blip or signing-flow timeout.</p>
+              <table class="field-table">
+                <thead><tr><th>Field</th><th>Type</th><th>Description</th></tr></thead>
+                <tbody>
+                  <tr><td class="field-name">oid</td><td class="field-type">number <span class="opt">opt.</span></td><td>On-chain id.</td></tr>
+                  <tr><td class="field-name">cloid</td><td class="field-type">string <span class="opt">opt.</span></td><td>Client id.</td></tr>
+                </tbody>
+              </table>
+              <div class="returns"><span class="returns-label">Returns</span><code>{ status:"resting" | "filled" | "canceled" | "rejected", fills?, reason? }</code></div>
+              <div class="tryit-bar"><button class="tryit-toggle" data-tryit>$ curl</button></div>
+              <div class="tryit-panel">
+                <div class="tryit-head"><span>POST https://api.alchemy.com/hyperliquid/orderStatus</span><button class="btn-run">▶ Run</button></div>
+                <pre class="tryit-curl">curl -X POST https://api.alchemy.com/hyperliquid/orderStatus -d '{ "oid": 1234567 }'</pre>
+              </div>
+            </div>
+          </article>
+
+          <article class="endpoint">
+            <header class="endpoint-head"><span class="verb verb-post">POST</span><span class="endpoint-path">/preflight</span><span class="endpoint-title">Preflight (validate without signing)</span><span class="endpoint-tryit">TRY IT</span></header>
+            <div class="endpoint-body">
+              <p class="endpoint-desc">Dry-run an action against current state. Surface margin checks, min-notional violations, price-band errors, and the exact builder fee that would be charged — without producing a typed-data payload or asking the user to sign.</p>
+              <table class="field-table">
+                <thead><tr><th>Field</th><th>Type</th><th>Description</th></tr></thead>
+                <tbody>
+                  <tr><td class="field-name">action</td><td class="field-type">object</td><td>The action you would send (order/cancel/modify).</td></tr>
+                  <tr><td class="field-name">wallet</td><td class="field-type">address</td><td>Wallet to simulate against.</td></tr>
+                </tbody>
+              </table>
+              <div class="returns"><span class="returns-label">Returns</span><code>{ ok: boolean, errors?: string[], estimatedFee?: string, estimatedFill?: object }</code></div>
+              <div class="tryit-bar"><button class="tryit-toggle" data-tryit>$ curl</button></div>
+              <div class="tryit-panel">
+                <div class="tryit-head"><span>POST https://api.alchemy.com/hyperliquid/preflight</span><button class="btn-run">▶ Run</button></div>
+                <pre class="tryit-curl">curl -X POST https://api.alchemy.com/hyperliquid/preflight -d '{ "action": {…}, "wallet":"0xAbC…" }'</pre>
+              </div>
+            </div>
+          </article>
+
+          <article class="endpoint">
+            <header class="endpoint-head"><span class="verb verb-get">GET</span><span class="endpoint-path">/markets</span><span class="endpoint-title">List Markets</span><span class="endpoint-tryit">TRY IT</span></header>
+            <div class="endpoint-body">
+              <p class="endpoint-desc">All perp and spot markets across native Hyperliquid plus every HIP-3 dex, in a flat list. Includes tick size, min size, max leverage, and oracle source.</p>
+              <table class="field-table">
+                <thead><tr><th>Field</th><th>Type</th><th>Description</th></tr></thead>
+                <tbody>
+                  <tr><td class="field-name">?type</td><td class="field-type">"perp" | "spot" <span class="opt">opt.</span></td><td>Filter by market type.</td></tr>
+                  <tr><td class="field-name">?dex</td><td class="field-type">string <span class="opt">opt.</span></td><td>Filter by HIP-3 dex slug.</td></tr>
+                </tbody>
+              </table>
+              <div class="returns"><span class="returns-label">Returns</span><code>Market[] // { symbol, type, dex, asset, tick, minSize, maxLeverage }</code></div>
+              <div class="tryit-bar"><button class="tryit-toggle" data-tryit>$ curl</button></div>
+              <div class="tryit-panel">
+                <div class="tryit-head"><span>GET https://api.alchemy.com/hyperliquid/markets</span><button class="btn-run">▶ Run</button></div>
+                <pre class="tryit-curl">curl https://api.alchemy.com/hyperliquid/markets?type=perp</pre>
+              </div>
+            </div>
+          </article>
+
+          <article class="endpoint">
+            <header class="endpoint-head"><span class="verb verb-get">GET</span><span class="endpoint-path">/dexes</span><span class="endpoint-title">List HIP-3 Dexes</span><span class="endpoint-tryit">TRY IT</span></header>
+            <div class="endpoint-body">
+              <p class="endpoint-desc">Discover permissionless HIP-3 dexes deployed on Hyperliquid. Each entry includes the dex slug, deployer, and the set of markets it offers.</p>
+              <table class="field-table">
+                <thead><tr><th>Field</th><th>Type</th><th>Description</th></tr></thead>
+                <tbody>
+                  <tr><td class="field-name">?deployer</td><td class="field-type">address <span class="opt">opt.</span></td><td>Filter by deployer wallet.</td></tr>
+                </tbody>
+              </table>
+              <div class="returns"><span class="returns-label">Returns</span><code>Dex[] // { slug, deployer, marketCount, createdAt }</code></div>
+              <div class="tryit-bar"><button class="tryit-toggle" data-tryit>$ curl</button></div>
+              <div class="tryit-panel">
+                <div class="tryit-head"><span>GET https://api.alchemy.com/hyperliquid/dexes</span><button class="btn-run">▶ Run</button></div>
+                <pre class="tryit-curl">curl https://api.alchemy.com/hyperliquid/dexes</pre>
+              </div>
+            </div>
+          </article>
+
+        </div>
+      </div>
+
+    </div>
+  </div>
+</section>
+
+<!-- ============================================================
+     5. FEES
+     ============================================================ -->
+<section class="section" id="fees">
+  <div class="container">
+    <div class="section-header">
+      <span class="eyebrow">Fees</span>
+      <h2>Two fees. Both transparent.</h2>
+      <p>One goes to Alchemy for routing and infrastructure. One goes to Hyperliquid for matching. That's it.</p>
+    </div>
+
+    <div class="fees-grid">
+      <div class="fees-card">
+        <div class="fees-card-head">
+          <div class="ftag">Alchemy</div>
+          <h3>Builder Fee</h3>
+          <p>Charged by Alchemy, injected into each order.</p>
+        </div>
+        <div class="fee-row">
+          <div class="fkind">Perpetuals</div>
+          <div class="fmain">0.04%</div>
+          <div class="fsub"><span class="lbl">Protocol max</span> 0.1%</div>
+        </div>
+        <div class="fee-row">
+          <div class="fkind">Spot</div>
+          <div class="fmain">0.05%</div>
+          <div class="fsub"><span class="lbl">Protocol max</span> 1%</div>
+        </div>
+      </div>
+
+      <div class="fees-card">
+        <div class="fees-card-head">
+          <div class="ftag">Hyperliquid</div>
+          <h3>Exchange Fee</h3>
+          <p>Charged by Hyperliquid for matching.</p>
+        </div>
+        <div class="fee-row">
+          <div class="fkind">Perpetuals</div>
+          <div class="fmain">Taker 0.045%</div>
+          <div class="fsub"><span class="lbl">Maker</span> 0.015%</div>
+        </div>
+        <div class="fee-row">
+          <div class="fkind">Spot</div>
+          <div class="fmain">Taker 0.070%</div>
+          <div class="fsub"><span class="lbl">Maker</span> 0.040%</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="fees-caption">
+      You approve a <code>maxFeeRate</code> ceiling (e.g. <code>"1%"</code>) for the builder fee. The actual builder fee is always within your approved limit. You can revoke at any time.
+    </div>
+  </div>
+</section>
+
+<!-- ============================================================
+     6. FAQ
+     ============================================================ -->
+<section class="section" id="faq">
+  <div class="container">
+    <div class="section-header">
+      <span class="eyebrow">FAQ</span>
+      <h2>Questions, answered.</h2>
+    </div>
+
+    <div class="faq">
+      <div class="faq-item open">
+        <button class="faq-q">What is Alchemy Hyperliquid?<span class="chev"></span></button>
+        <div class="faq-a">A zero-custody REST builder API for trading on Hyperliquid. You sign locally with your private key; Alchemy routes the signed payload to the chain and earns a small builder fee in return. Same product surface as Hyperliquid's own API, with extras like preflight, pre-built cancels, and language SDKs.</div>
+      </div>
+      <div class="faq-item">
+        <button class="faq-q">How does the build-sign-send pattern work?<span class="chev"></span></button>
+        <div class="faq-a">First, you call a <code>build*</code> endpoint to get an EIP-712 typed-data payload. Then you sign it locally — either in a hardware wallet, browser wallet, or with a local key the SDK manages. Finally you call the matching <code>send*</code> endpoint with the signature. Alchemy verifies the signature, attaches the builder fee within your approved ceiling, and forwards to Hyperliquid.</div>
+      </div>
+      <div class="faq-item">
+        <button class="faq-q">Is this custodial?<span class="chev"></span></button>
+        <div class="faq-a">No. Never. Alchemy sees signed payloads and routes them — your keys never leave your machine and we have no way to move funds without a signature you produce.</div>
+      </div>
+      <div class="faq-item">
+        <button class="faq-q">What are the trading fees?<span class="chev"></span></button>
+        <div class="faq-a">Two layers. Alchemy charges a builder fee — 0.04% on perpetuals, 0.05% on spot — within a ceiling you approve once. Hyperliquid itself charges the exchange fee: 0.045% taker / 0.015% maker on perps, 0.070% taker / 0.040% maker on spot. There are no monthly platform fees.</div>
+      </div>
+      <div class="faq-item">
+        <button class="faq-q">What is a builder fee on Hyperliquid?<span class="chev"></span></button>
+        <div class="faq-a">Hyperliquid lets any registered "builder" attach a small fee to orders they route to the matcher, capped by a user-signed approval. Alchemy is a builder. The protocol enforces a maximum of 0.1% on perps and 1% on spot; the user signs a ceiling at or below that, and Alchemy charges below the ceiling on every order.</div>
+      </div>
+      <div class="faq-item">
+        <button class="faq-q">How do I approve / revoke?<span class="chev"></span></button>
+        <div class="faq-a">Visit <a href="approve.html">/approve</a>, connect your wallet, and sign a single EIP-712 message setting your <code>maxFeeRate</code>. Revoking is symmetric — return to the same page and click "Revoke" to publish a revocation payload to the protocol. Either action takes one signature.</div>
+      </div>
+      <div class="faq-item">
+        <button class="faq-q">What markets can I trade?<span class="chev"></span></button>
+        <div class="faq-a">Every perp and spot pair on Hyperliquid mainnet, plus markets on any HIP-3 dex and assets staged for HIP-4 launches. The SDK addresses HIP-3 markets with a <code>dex:SYMBOL</code> namespace so the call signature stays the same: <code>sdk.buy("xyz:SILVER", { notional: 11 })</code>.</div>
+      </div>
+      <div class="faq-item">
+        <button class="faq-q">Do I need to share my private key?<span class="chev"></span></button>
+        <div class="faq-a">No. The SDK signs locally — either with a hot key you supply (kept in memory), an injected browser wallet, or a hardware signer. Alchemy receives signed payloads, never raw keys.</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============================================================
+     7. FOOTER
+     ============================================================ -->
+<footer class="footer">
+  <div class="container">
+    <div class="footer-inner">
+      <div class="footer-brand">
+        <div class="footer-brand-row">
+          <img src="assets/logo-wordmark-white.svg" alt="Alchemy" />
+          <span>Powered by Alchemy</span>
+        </div>
+        <p class="footer-disclaimer">Alchemy Hyperliquid is not affiliated with Hyperliquid Corp or the Hyper Foundation. Crypto trading involves risk of loss; this product is infrastructure, not investment advice.</p>
+      </div>
+
+      <div class="footer-links">
+        <div class="footer-col">
+          <span class="head">Product</span>
+          <a href="#api">API reference</a>
+          <a href="#quickstart">Quickstart</a>
+          <a href="approve.html">Approve wallet</a>
+          <a href="#fees">Fees</a>
+        </div>
+        <div class="footer-col">
+          <span class="head">Community</span>
+          <a href="#">Discord</a>
+          <a href="#">GitHub</a>
+          <a href="#">llms.txt</a>
+          <a href="#">Status</a>
+        </div>
+      </div>
+    </div>
+  </div>
+</footer>
+
+<!-- ============================================================
+     JS — tabs, accordion, endpoint expand, copy
+     ============================================================ -->
+<script>
+(function(){
+  // Language tab switcher
+  document.querySelectorAll('[data-snippet] .code-tab').forEach(function(tab){
+    tab.addEventListener('click', function(){
+      var lang = tab.dataset.lang;
+      var block = tab.closest('[data-snippet]');
+      block.querySelectorAll('.code-tab').forEach(function(t){ t.classList.toggle('active', t === tab); });
+      block.querySelectorAll('pre[data-pane]').forEach(function(p){
+        p.style.display = (p.dataset.pane === lang) ? '' : 'none';
+      });
+    });
+  });
+
+  // Copy button
+  document.querySelectorAll('[data-copy]').forEach(function(btn){
+    btn.addEventListener('click', function(){
+      var block = btn.closest('[data-snippet]');
+      var visible = block.querySelector('pre[data-pane]:not([style*="display:none"]), pre[data-pane][style=""]');
+      if (!visible) visible = block.querySelector('pre[data-pane]');
+      var text = visible.innerText;
+      if (navigator.clipboard) navigator.clipboard.writeText(text).catch(function(){});
+      btn.classList.add('ok');
+      btn.querySelector('.ic-copy').style.display = 'none';
+      btn.querySelector('.ic-check').style.display = '';
+      setTimeout(function(){
+        btn.classList.remove('ok');
+        btn.querySelector('.ic-copy').style.display = '';
+        btn.querySelector('.ic-check').style.display = 'none';
+      }, 1000);
+    });
+  });
+
+  // Endpoint expand
+  document.querySelectorAll('.endpoint-head').forEach(function(h){
+    h.addEventListener('click', function(){
+      h.parentElement.classList.toggle('open');
+    });
+  });
+
+  // Try it expand
+  document.querySelectorAll('[data-tryit]').forEach(function(t){
+    t.addEventListener('click', function(e){
+      e.stopPropagation();
+      t.closest('.endpoint').classList.toggle('try-open');
+    });
+  });
+
+  // FAQ
+  document.querySelectorAll('.faq-q').forEach(function(q){
+    q.addEventListener('click', function(){
+      q.parentElement.classList.toggle('open');
+    });
+  });
+})();
+</script>
+
+</body>
+</html>

@@ -1,0 +1,766 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Approve Builder Fee — Alchemy Hyperliquid</title>
+<link rel="stylesheet" href="styles.css" />
+<style>
+/* ----- /approve page-specific styles ----- */
+.approve-shell { min-height: 100vh; display: flex; flex-direction: column; }
+.approve-main {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 60px 24px;
+  position: relative;
+  overflow: hidden;
+}
+.approve-main::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(50% 50% at 50% 25%, rgba(108,92,231,0.18) 0%, rgba(54,63,249,0.10) 35%, transparent 70%);
+  pointer-events: none;
+  z-index: 0;
+}
+.approve-main::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background-image:
+    linear-gradient(rgba(255,255,255,0.025) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255,255,255,0.025) 1px, transparent 1px);
+  background-size: 56px 56px;
+  mask-image: radial-gradient(70% 60% at 50% 30%, #000 0%, transparent 80%);
+  -webkit-mask-image: radial-gradient(70% 60% at 50% 30%, #000 0%, transparent 80%);
+  pointer-events: none;
+  z-index: 0;
+}
+
+.approve-card {
+  position: relative;
+  z-index: 1;
+  width: 100%;
+  max-width: 520px;
+  background: linear-gradient(180deg, #10162a 0%, #0d1325 100%);
+  border: 1px solid var(--border-strong);
+  border-radius: 20px;
+  box-shadow: 0 40px 100px -30px rgba(54,63,249,0.45), 0 1px 0 rgba(255,255,255,0.05) inset;
+  overflow: hidden;
+}
+.approve-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 18px 22px;
+  border-bottom: 1px solid var(--border);
+  background: rgba(255,255,255,0.015);
+}
+.approve-head .brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 14px;
+  font-weight: 500;
+}
+.approve-head .brand img { height: 18px; }
+.approve-head .brand .sub { color: var(--fg-muted); font-weight: 400; }
+.approve-head .close {
+  width: 28px; height: 28px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--fg-muted);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.approve-head .close:hover { color: var(--fg); border-color: var(--border-strong); }
+.approve-body { padding: 28px 28px 28px; }
+
+/* Title + subtitle inside card */
+.approve-title { font-size: 22px; font-weight: 500; letter-spacing: -0.01em; margin: 0 0 8px; }
+.approve-sub { font-size: 14px; line-height: 1.55; color: var(--fg-muted); margin: 0 0 22px; }
+
+/* State A — Not connected */
+.connect-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 22px;
+}
+.connector-row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: rgba(255,255,255,0.02);
+  cursor: pointer;
+  transition: all 160ms var(--ease);
+  text-align: left;
+  font-family: var(--font-sans);
+  color: var(--fg);
+}
+.connector-row:hover { border-color: var(--accent); background: rgba(54,63,249,0.06); }
+.connector-row .ico {
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  background: linear-gradient(135deg, #F6851B 0%, #E2761B 100%);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+  font-weight: 700;
+  font-size: 14px;
+  flex-shrink: 0;
+}
+.connector-row .ico.wc { background: linear-gradient(135deg, #3B99FC 0%, #1F6FE6 100%); }
+.connector-row .ico.cb { background: linear-gradient(135deg, #2D5BFF 0%, #1A41C4 100%); }
+.connector-row .ico.ln { background: linear-gradient(135deg, #B967DF 0%, #6C5CE7 100%); }
+.connector-row .lbl { font-size: 14.5px; font-weight: 500; }
+.connector-row .meta { font-size: 12.5px; color: var(--fg-dim); margin-left: auto; }
+
+.explainer {
+  font-size: 13.5px;
+  line-height: 1.6;
+  color: var(--fg-muted);
+  padding: 14px 16px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: rgba(54,63,249,0.04);
+}
+.explainer code { color: var(--accent); }
+
+/* State B — Connected, not approved */
+.wallet-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px 8px 8px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: rgba(255,255,255,0.03);
+  font-family: var(--font-mono);
+  font-size: 13px;
+  color: var(--fg);
+  margin-bottom: 22px;
+}
+.wallet-chip .av {
+  width: 22px; height: 22px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, var(--violet), var(--accent), var(--cyan));
+  flex-shrink: 0;
+}
+.wallet-chip .dis {
+  font-family: var(--font-sans);
+  font-size: 12px;
+  color: var(--fg-dim);
+  margin-left: 4px;
+  cursor: pointer;
+}
+.wallet-chip .dis:hover { color: var(--fg); }
+
+.field-group { display: flex; flex-direction: column; gap: 8px; margin-bottom: 20px; }
+.field-label {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+}
+.field-label .lbl { font-size: 13px; color: var(--fg-muted); font-weight: 500; }
+.field-label .hint { font-size: 12px; color: var(--fg-dim); }
+.fee-input {
+  display: flex;
+  align-items: stretch;
+  border: 1px solid var(--border-strong);
+  border-radius: 12px;
+  overflow: hidden;
+  background: rgba(0,0,0,0.25);
+  transition: border-color 160ms var(--ease);
+}
+.fee-input:focus-within { border-color: var(--accent); }
+.fee-input input {
+  flex: 1;
+  background: transparent;
+  border: 0;
+  padding: 12px 14px;
+  color: var(--fg);
+  font-family: var(--font-mono);
+  font-size: 16px;
+  outline: none;
+}
+.fee-input .suffix {
+  display: inline-flex;
+  align-items: center;
+  padding: 0 14px;
+  color: var(--fg-muted);
+  font-family: var(--font-mono);
+  border-left: 1px solid var(--border);
+}
+.fee-meta { font-size: 12px; color: var(--fg-dim); padding: 0 2px; }
+.fee-meta strong { color: var(--fg-muted); font-weight: 500; }
+
+.btn-block { width: 100%; justify-content: center; padding: 14px 22px; font-size: 15px; }
+.btn-secondary-block { width: 100%; justify-content: center; padding: 12px 22px; font-size: 14px; }
+
+.details {
+  margin-top: 18px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: #07101f;
+  overflow: hidden;
+}
+.details summary {
+  list-style: none;
+  cursor: pointer;
+  padding: 12px 16px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 13px;
+  color: var(--fg-muted);
+  font-family: var(--font-mono);
+}
+.details summary::-webkit-details-marker { display: none; }
+.details summary::after {
+  content: "";
+  width: 9px; height: 9px;
+  border-right: 1.5px solid currentColor;
+  border-bottom: 1.5px solid currentColor;
+  transform: rotate(45deg);
+  transition: transform 180ms var(--ease);
+}
+.details[open] summary::after { transform: rotate(-135deg); }
+.details pre {
+  margin: 0;
+  padding: 14px 16px;
+  border-top: 1px solid var(--border);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  line-height: 1.65;
+  color: #D5DAF5;
+  overflow-x: auto;
+  white-space: pre;
+}
+
+/* State C — Approved */
+.approved-badge {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 16px;
+  border: 1px solid rgba(16,185,129,0.35);
+  border-radius: 14px;
+  background: rgba(16,185,129,0.08);
+  margin-bottom: 22px;
+}
+.approved-badge .check {
+  width: 40px; height: 40px;
+  border-radius: 50%;
+  background: var(--success);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  color: #042e1a;
+}
+.approved-badge .check svg { width: 20px; height: 20px; stroke: currentColor; stroke-width: 3; fill: none; }
+.approved-badge .ttl { font-size: 15px; font-weight: 500; color: var(--fg); margin-bottom: 2px; }
+.approved-badge .meta { font-size: 12.5px; color: var(--success-soft); font-family: var(--font-mono); }
+
+.kv-list {
+  margin: 0 0 22px;
+  padding: 4px 0;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: rgba(255,255,255,0.015);
+}
+.kv-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 11px 14px;
+  font-size: 13.5px;
+  border-bottom: 1px solid var(--border);
+}
+.kv-row:last-child { border-bottom: 0; }
+.kv-row .k { color: var(--fg-muted); }
+.kv-row .v { color: var(--fg); font-family: var(--font-mono); font-size: 13px; }
+.kv-row .v.success { color: var(--success-soft); }
+
+/* State D — Pending */
+.pending-row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 16px;
+  border: 1px solid var(--border-strong);
+  border-radius: 14px;
+  background: rgba(255,255,255,0.02);
+  margin-bottom: 22px;
+}
+.spinner {
+  width: 24px; height: 24px;
+  border-radius: 50%;
+  border: 2.5px solid rgba(255,255,255,0.12);
+  border-top-color: var(--accent);
+  animation: spin 0.9s linear infinite;
+  flex-shrink: 0;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+.pending-row .txt .ttl { font-size: 15px; font-weight: 500; color: var(--fg); margin-bottom: 2px; }
+.pending-row .txt .sub { font-size: 12.5px; color: var(--fg-muted); }
+.btn-disabled { opacity: 0.55; cursor: not-allowed; pointer-events: none; }
+
+/* State E — Error */
+.error-banner {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 14px 16px;
+  border: 1px solid rgba(239,68,68,0.35);
+  border-radius: 12px;
+  background: rgba(239,68,68,0.08);
+  margin-bottom: 18px;
+  color: #FECACA;
+  font-size: 13.5px;
+  line-height: 1.5;
+}
+.error-banner .ic {
+  width: 22px; height: 22px;
+  border-radius: 50%;
+  background: var(--error);
+  color: #fff;
+  font-weight: 700;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  font-size: 13px;
+}
+.error-banner .ttl { font-weight: 500; color: #fff; margin-bottom: 3px; font-size: 14px; }
+.error-banner a { color: #FCA5A5; text-decoration: underline; text-underline-offset: 3px; }
+.error-banner a:hover { color: #fff; }
+
+/* Footer of card */
+.card-foot {
+  margin-top: 20px;
+  padding-top: 18px;
+  border-top: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 12px;
+  color: var(--fg-dim);
+}
+.card-foot a { color: var(--fg-muted); }
+.card-foot a:hover { color: var(--fg); }
+
+/* State switcher (preview-only chrome) */
+.state-switcher {
+  display: flex;
+  justify-content: center;
+  gap: 6px;
+  margin-top: 28px;
+  flex-wrap: wrap;
+  position: relative;
+  z-index: 1;
+}
+.state-switcher .lbl {
+  width: 100%;
+  text-align: center;
+  font-size: 11px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--fg-dim);
+  margin-bottom: 4px;
+}
+.state-btn {
+  padding: 7px 14px;
+  background: rgba(255,255,255,0.03);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--fg-muted);
+  cursor: pointer;
+  transition: all 140ms var(--ease);
+}
+.state-btn:hover { color: var(--fg); border-color: var(--border-strong); }
+.state-btn.active {
+  background: rgba(54,63,249,0.14);
+  border-color: var(--accent);
+  color: #C9CEFF;
+}
+[data-state] { display: none; }
+[data-state].active { display: block; }
+
+/* Mini-nav at top of approve page */
+.approve-nav {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 18px 28px;
+  width: 100%;
+  max-width: var(--container);
+  margin: 0 auto;
+  box-sizing: border-box;
+  position: relative;
+  z-index: 2;
+}
+.approve-nav .brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 14px;
+}
+.approve-nav .brand img { height: 20px; }
+.approve-nav .brand .sub { color: var(--fg-muted); }
+.approve-nav .nav-divider { width: 1px; height: 14px; background: var(--border-strong); }
+.approve-nav .back {
+  font-size: 13px;
+  color: var(--fg-muted);
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.approve-nav .back:hover { color: var(--fg); }
+</style>
+</head>
+<body>
+<div class="approve-shell">
+
+  <!-- top nav -->
+  <div class="approve-nav">
+    <a href="index.html" class="brand">
+      <img src="assets/logo-wordmark-white.svg" alt="Alchemy" />
+      <span class="nav-divider"></span>
+      <span class="sub">Hyperliquid</span>
+    </a>
+    <a href="index.html" class="back">← Back to docs</a>
+  </div>
+
+  <main class="approve-main">
+
+    <div style="width:100%;max-width:520px">
+
+      <!-- ============================================================
+           STATE A — Not connected (default)
+           ============================================================ -->
+      <div data-state="connect" class="active">
+        <div class="approve-card">
+          <header class="approve-head">
+            <span class="brand">
+              <img src="assets/logo-brandmark-white.svg" alt="" />
+              <span>Approve Builder Fee</span>
+            </span>
+            <button class="close" aria-label="Close">×</button>
+          </header>
+          <div class="approve-body">
+            <h1 class="approve-title">Connect a wallet to continue.</h1>
+            <p class="approve-sub">Approve Alchemy as a builder so your orders can route through our infrastructure. You're approving a maximum fee rate (default <strong>1%</strong>). The actual fee is <strong>0.04% perps / 0.05% spot</strong>. You can revoke any time.</p>
+
+            <div class="connect-grid">
+              <button class="connector-row">
+                <span class="ico">M</span>
+                <span class="lbl">MetaMask</span>
+                <span class="meta">Detected</span>
+              </button>
+              <button class="connector-row">
+                <span class="ico wc">W</span>
+                <span class="lbl">WalletConnect</span>
+                <span class="meta">QR code</span>
+              </button>
+              <button class="connector-row">
+                <span class="ico cb">C</span>
+                <span class="lbl">Coinbase Wallet</span>
+                <span class="meta">Browser</span>
+              </button>
+              <button class="connector-row">
+                <span class="ico ln">L</span>
+                <span class="lbl">Ledger</span>
+                <span class="meta">Hardware</span>
+              </button>
+            </div>
+
+            <div class="explainer">
+              Connecting only reads your address. Approving the builder fee is a separate, single signature you'll review on the next step.
+            </div>
+
+            <div class="card-foot">
+              <span>EIP-712 typed-data signature</span>
+              <a href="#">What's a builder fee?</a>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ============================================================
+           STATE B — Connected, not approved
+           ============================================================ -->
+      <div data-state="ready">
+        <div class="approve-card">
+          <header class="approve-head">
+            <span class="brand">
+              <img src="assets/logo-brandmark-white.svg" alt="" />
+              <span>Approve Builder Fee</span>
+            </span>
+            <button class="close" aria-label="Close">×</button>
+          </header>
+          <div class="approve-body">
+            <div class="wallet-chip">
+              <span class="av"></span>
+              <span>0xAbC4…9F2D</span>
+              <span class="dis">Disconnect</span>
+            </div>
+
+            <h1 class="approve-title">Approve Alchemy as a builder.</h1>
+            <p class="approve-sub">Set a ceiling on the builder fee you'll allow. We charge well below it on every order — and you can revoke at any time with one signature.</p>
+
+            <div class="field-group">
+              <div class="field-label">
+                <span class="lbl">Max fee rate</span>
+                <span class="hint">Protocol max 0.1% perps · 1% spot</span>
+              </div>
+              <div class="fee-input">
+                <input type="text" value="1" inputmode="decimal" />
+                <span class="suffix">%</span>
+              </div>
+              <div class="fee-meta">Actual fee per order: <strong>0.04% on perps · 0.05% on spot</strong></div>
+            </div>
+
+            <button class="btn btn-primary btn-block">
+              Approve Builder Fee
+              <svg class="btn-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
+            </button>
+
+            <details class="details">
+              <summary>Inspect EIP-712 typed data</summary>
+              <pre>{
+  "domain": {
+    "name": "HyperliquidSignTransaction",
+    "version": "1",
+    "chainId": 42161
+  },
+  "types": {
+    "ApproveBuilderFee": [
+      { "name": "hyperliquidChain", "type": "string" },
+      { "name": "builder",          "type": "address" },
+      { "name": "maxFeeRate",       "type": "string"  },
+      { "name": "nonce",            "type": "uint64"  }
+    ]
+  },
+  "primaryType": "ApproveBuilderFee",
+  "message": {
+    "hyperliquidChain": "Mainnet",
+    "builder":          "0x4F1c…d3A2",
+    "maxFeeRate":       "1%",
+    "nonce":            1716830142000
+  }
+}</pre>
+            </details>
+
+            <div class="card-foot">
+              <span>Network · Hyperliquid Mainnet</span>
+              <a href="#">View on explorer ↗</a>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ============================================================
+           STATE C — Approved
+           ============================================================ -->
+      <div data-state="approved">
+        <div class="approve-card">
+          <header class="approve-head">
+            <span class="brand">
+              <img src="assets/logo-brandmark-white.svg" alt="" />
+              <span>Approve Builder Fee</span>
+            </span>
+            <button class="close" aria-label="Close">×</button>
+          </header>
+          <div class="approve-body">
+            <div class="wallet-chip">
+              <span class="av"></span>
+              <span>0xAbC4…9F2D</span>
+              <span class="dis">Disconnect</span>
+            </div>
+
+            <div class="approved-badge">
+              <span class="check"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12l5 5L20 7"/></svg></span>
+              <div>
+                <div class="ttl">Approved up to 1%</div>
+                <div class="meta">Active since 26 May 2026 · tx 0x9c2a…</div>
+              </div>
+            </div>
+
+            <div class="kv-list">
+              <div class="kv-row">
+                <span class="k">Builder address</span>
+                <span class="v">0x4F1c…d3A2</span>
+              </div>
+              <div class="kv-row">
+                <span class="k">Max fee rate</span>
+                <span class="v">1%</span>
+              </div>
+              <div class="kv-row">
+                <span class="k">Charged on perps</span>
+                <span class="v success">0.04%</span>
+              </div>
+              <div class="kv-row">
+                <span class="k">Charged on spot</span>
+                <span class="v success">0.05%</span>
+              </div>
+            </div>
+
+            <button class="btn btn-secondary btn-secondary-block">Revoke</button>
+
+            <div class="card-foot">
+              <span>You can revoke any time</span>
+              <a href="#">Order history ↗</a>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ============================================================
+           STATE D — Pending signature
+           ============================================================ -->
+      <div data-state="pending">
+        <div class="approve-card">
+          <header class="approve-head">
+            <span class="brand">
+              <img src="assets/logo-brandmark-white.svg" alt="" />
+              <span>Approve Builder Fee</span>
+            </span>
+            <button class="close" aria-label="Close">×</button>
+          </header>
+          <div class="approve-body">
+            <div class="wallet-chip">
+              <span class="av"></span>
+              <span>0xAbC4…9F2D</span>
+              <span class="dis">Disconnect</span>
+            </div>
+
+            <div class="pending-row">
+              <span class="spinner"></span>
+              <div class="txt">
+                <div class="ttl">Confirm in your wallet…</div>
+                <div class="sub">Open MetaMask and approve the EIP-712 signature.</div>
+              </div>
+            </div>
+
+            <button class="btn btn-primary btn-block btn-disabled" aria-disabled="true">
+              Awaiting signature
+            </button>
+
+            <details class="details">
+              <summary>What you're signing</summary>
+              <pre>ApproveBuilderFee {
+  builder:    "0x4F1c…d3A2",
+  maxFeeRate: "1%",
+  nonce:      1716830142000
+}
+
+No transaction will be broadcast.
+No funds move from this signature.</pre>
+            </details>
+
+            <div class="card-foot">
+              <span>Hyperliquid Mainnet</span>
+              <a href="#">Trouble signing?</a>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ============================================================
+           STATE E — Error
+           ============================================================ -->
+      <div data-state="error">
+        <div class="approve-card">
+          <header class="approve-head">
+            <span class="brand">
+              <img src="assets/logo-brandmark-white.svg" alt="" />
+              <span>Approve Builder Fee</span>
+            </span>
+            <button class="close" aria-label="Close">×</button>
+          </header>
+          <div class="approve-body">
+            <div class="wallet-chip">
+              <span class="av"></span>
+              <span>0xAbC4…9F2D</span>
+              <span class="dis">Disconnect</span>
+            </div>
+
+            <div class="error-banner">
+              <span class="ic">!</span>
+              <div>
+                <div class="ttl">User rejected the signature</div>
+                <div>The wallet returned <code>code 4001</code>. Nothing was sent. <a href="#">Try again</a> or change the max fee rate first.</div>
+              </div>
+            </div>
+
+            <div class="field-group">
+              <div class="field-label">
+                <span class="lbl">Max fee rate</span>
+                <span class="hint">Protocol max 0.1% perps · 1% spot</span>
+              </div>
+              <div class="fee-input">
+                <input type="text" value="1" inputmode="decimal" />
+                <span class="suffix">%</span>
+              </div>
+            </div>
+
+            <button class="btn btn-primary btn-block">
+              Try again
+              <svg class="btn-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 12a9 9 0 1 0 3-6.7M3 4v5h5"/></svg>
+            </button>
+
+            <div class="card-foot">
+              <span>Hyperliquid Mainnet</span>
+              <a href="#">Contact support</a>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ============================================================
+           Preview-only state switcher (does NOT ship in production)
+           ============================================================ -->
+      <div class="state-switcher">
+        <span class="lbl">Preview · pick a state</span>
+        <button class="state-btn active" data-target="connect">a · not connected</button>
+        <button class="state-btn" data-target="ready">b · ready to approve</button>
+        <button class="state-btn" data-target="approved">c · approved</button>
+        <button class="state-btn" data-target="pending">d · pending</button>
+        <button class="state-btn" data-target="error">e · error</button>
+      </div>
+
+    </div>
+  </main>
+</div>
+
+<script>
+(function(){
+  var btns = document.querySelectorAll('.state-btn');
+  btns.forEach(function(b){
+    b.addEventListener('click', function(){
+      var tgt = b.dataset.target;
+      btns.forEach(function(x){ x.classList.toggle('active', x === b); });
+      document.querySelectorAll('[data-state]').forEach(function(s){
+        s.classList.toggle('active', s.dataset.state === tgt);
+      });
+    });
+  });
+})();
+</script>
+
+</body>
+</html>
