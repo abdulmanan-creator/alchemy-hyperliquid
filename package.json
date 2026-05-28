@@ -1,0 +1,27 @@
+{
+  "name": "alchemy-hyperliquid",
+  "private": true,
+  "version": "0.0.1",
+  "description": "Alchemy Hyperliquid — zero-custody REST builder API for Hyperliquid.",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev": "npm-run-all --parallel dev:*",
+    "dev:api": "npm run dev -w @alchemy-hl/api",
+    "dev:web": "npm run dev -w @alchemy-hl/web",
+    "build": "npm run build -w @alchemy-hl/shared && npm run build -w @alchemy-hl/sdk-preview && npm run build -w @alchemy-hl/api && npm run build -w @alchemy-hl/web",
+    "test": "npm run test -w @alchemy-hl/api && npm run test -w @alchemy-hl/web",
+    "lint": "echo 'lint not configured yet'",
+    "typecheck": "tsc -b apps/api apps/web packages/shared packages/sdk-preview --pretty"
+  },
+  "devDependencies": {
+    "npm-run-all": "^4.1.5",
+    "typescript": "^5.4.5"
+  },
+  "engines": {
+    "node": ">=20.0.0",
+    "npm": ">=10.0.0"
+  }
+}

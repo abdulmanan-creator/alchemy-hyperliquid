@@ -1,0 +1,68 @@
+# =============================================================================
+# Render deploy config — two services in one repo (monorepo).
+# Push to GitHub, point Render at this file, set the env vars, deploy.
+# =============================================================================
+
+services:
+  # ---- API ------------------------------------------------------------------
+  - type: web
+    name: alchemy-hl-api
+    runtime: node
+    plan: starter
+    region: oregon
+    rootDir: .
+    buildCommand: npm ci && npm run build -w @alchemy-hl/shared && npm run build -w @alchemy-hl/api
+    startCommand: npm run start -w @alchemy-hl/api
+    healthCheckPath: /healthz
+    autoDeploy: true
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 8080
+      - key: ALCHEMY_BUILDER_ADDRESS
+        sync: false
+      - key: HYPERLIQUID_API_URL
+        value: https://api.hyperliquid.xyz
+      - key: PERPS_BUILDER_FEE_BPS
+        value: 4
+      - key: SPOT_BUILDER_FEE_BPS
+        value: 5
+      - key: MAX_BUILDER_FEE_BPS_PERPS
+        value: 10
+      - key: MAX_BUILDER_FEE_BPS_SPOT
+        value: 100
+      - key: WEB_ORIGIN
+        fromService:
+          name: alchemy-hl-web
+          type: web
+          property: hostport
+      - key: LOG_LEVEL
+        value: info
+      # TODO(privy-jwt): wire Privy session verification in apps/api before
+      # gating non-public endpoints. Until then this secret is set but unused.
+      - key: PRIVY_APP_SECRET
+        sync: false
+
+  # ---- Web ------------------------------------------------------------------
+  - type: web
+    name: alchemy-hl-web
+    runtime: node
+    plan: starter
+    region: oregon
+    rootDir: .
+    buildCommand: npm ci && npm run build -w @alchemy-hl/shared && npm run build -w @alchemy-hl/sdk-preview && npm run build -w @alchemy-hl/web
+    startCommand: npm run start -w @alchemy-hl/web
+    autoDeploy: true
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: NEXT_PUBLIC_API_URL
+        fromService:
+          name: alchemy-hl-api
+          type: web
+          property: hostport
+      - key: NEXT_PUBLIC_BUILDER_ADDR
+        sync: false
+      - key: NEXT_PUBLIC_PRIVY_APP_ID
+        sync: false
