@@ -11,8 +11,8 @@
     "dev": "npm-run-all --parallel dev:*",
     "dev:api": "npm run dev -w @alchemy-hl/api",
     "dev:web": "npm run dev -w @alchemy-hl/web",
-    "build": "npm run build -w @alchemy-hl/shared && npm run build -w @alchemy-hl/sdk-preview && npm run build -w @alchemy-hl/api && npm run build -w @alchemy-hl/web",
-    "test": "npm run test -w @alchemy-hl/api && npm run test -w @alchemy-hl/web",
+    "build": "npm run build -w @alchemy-hl/shared && npm run build -w @alchemy-hl/sdk-preview && npm run build -w @alchemy-hl/sdk && npm run build -w @alchemy-hl/api && npm run build -w @alchemy-hl/web",
+    "test": "npm run test -w @alchemy-hl/api && npm run test -w @alchemy-hl/sdk && npm run test -w @alchemy-hl/web",
     "lint": "echo 'lint not configured yet'",
     "typecheck": "tsc -b apps/api apps/web packages/shared packages/sdk-preview --pretty"
   },
