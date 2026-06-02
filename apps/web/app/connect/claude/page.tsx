@@ -44,13 +44,34 @@ export default function ConnectClaudePage() {
           <CodeBlock label="MCP server URL">{MCP_URL}</CodeBlock>
         </Step>
 
-        <Step n={2} title="Open Claude → Settings → Connectors → Add custom">
+        <Step n={2} title="Open the connector dialog in Claude Web">
           <p>
-            In Claude Web (or Claude desktop, both work): Settings → Connectors
-            → &ldquo;Add custom connector.&rdquo; In Claude desktop you may
-            need to enable Developer mode in Advanced settings to see this
-            option.
+            One click opens the &ldquo;Add custom connector&rdquo; modal
+            directly in Claude Web (skips the Settings → Connectors menu
+            dive). Claude desktop users with Developer mode enabled can use
+            the same flow there.
           </p>
+          <div style={{ marginTop: 14 }}>
+            <a
+              className="btn btn-primary"
+              href="https://claude.ai/customize/connectors?modal=add-custom-connector"
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              Open in Claude Web
+              <svg className="btn-icon" viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M5 12h14M13 6l6 6-6 6" />
+              </svg>
+            </a>
+          </div>
+          <div className="callout warn" style={{ marginTop: 14 }}>
+            <strong>If the connector option isn&apos;t visible:</strong> custom
+            connectors are a beta feature gated by Anthropic. Most work / team
+            accounts have it disabled by org policy. For testing today, use a
+            personal Claude.ai Pro account; for users at locked-down orgs,
+            we&apos;ll route them to ChatGPT Apps or the local Claude desktop
+            install as alternatives.
+          </div>
         </Step>
 
         <Step n={3} title='Set Name to "Alchemy Hyperliquid", paste the URL'>
