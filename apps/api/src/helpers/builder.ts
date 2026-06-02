@@ -76,7 +76,25 @@ export function injectBuilder(action: OrderAction, cfg: Config): BuilderInfo {
     );
   }
 
-  const info: BuilderInfo = { b: cfg.ALCHEMY_BUILDER_ADDRESS, f: fee };
+  // HL canonicalizes addresses to lowercase before hashing the msgpack-encoded
+  // action for signature verification. Their Python SDK does `builder.lower()`
+  // explicitly. If we leave the address in EIP-55 mixed case here, msgpack
+  // encodes the literal mixed-case string — our hash and HL's hash diverge, and
+  // HL recovers a random "user" from the signature, rejecting with "User does
+  // not exist." Only L1 actions hit this; user-signed envelopes (approveBuilderFee)
+  // use EIP-712 address encoding which is case-insensitive.
+  //
+  // HL's wire format for `builder.f` is *tenths of basis points* (matches the
+  // tenths-of-bps unit they use everywhere internally, including maxFeeRate
+  // raw values returned by /info maxBuilderFee). So configured 4 bps → f=40.
+  // Discovered by working back from a live trade: our configured 4 bps was
+  // being charged as 0.4 bps, meaning the builder was earning 10× less than
+  // intended. Caps (MAX_BUILDER_FEE_BPS_*) stay in bps for ergonomics; only
+  // the wire conversion happens here at injection.
+  const info: BuilderInfo = {
+    b: cfg.builderAddressLower as `0x${string}`,
+    f: fee * 10,
+  };
   action.builder = info;
   return info;
 }

@@ -75,10 +75,32 @@ export async function exchangeRoute(app: FastifyInstance): Promise<void> {
         "exchange_send",
       );
 
+      // Normalize signature recovery id (v) to 27/28 before forwarding to HL.
+      // Some signers (Privy embedded wallets via raw EIP-1193, certain smart
+      // signers) return v in 0/1 (yParity) format. viem normalizes on recovery
+      // — so OUR recoverActionSigner above returns the right signer — but HL's
+      // ecrecover uses v as-is. Without normalization HL recovers a different
+      // (random-looking) address and rejects with "User does not exist".
+      const originalV = body.signature.v;
+      const normalizedSignature = {
+        r: body.signature.r,
+        s: body.signature.s,
+        v: originalV < 27 ? originalV + 27 : originalV,
+      };
+      req.log.info(
+        {
+          signerWeRecovered: signer,
+          rawV: originalV,
+          normalizedV: normalizedSignature.v,
+          actionKeysOrder: Object.keys(body.action),
+        },
+        "forwarding_to_hl",
+      );
+
       const exchangeResponse = await hl.forwardExchange({
         action: body.action as unknown,
         nonce: body.nonce,
-        signature: body.signature,
+        signature: normalizedSignature,
       });
 
       const out: SendResponse = {

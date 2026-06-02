@@ -11,6 +11,7 @@ import type {
   Action,
   ApiError,
   ApprovalState,
+  BalanceState,
   BuildRequest,
   BuildResponse,
   DexesResponse,
@@ -24,6 +25,7 @@ export type {
   Action,
   ApiError,
   ApprovalState,
+  BalanceState,
   BuildResponse,
   DexesResponse,
   MarketsResponse,
@@ -68,6 +70,14 @@ export class AlchemyHyperliquid {
     return this.request<ApprovalState>(
       "GET",
       `/approval?user=${encodeURIComponent(user)}`,
+    );
+  }
+
+  /** Read `user`'s HL perp account balance (accountValue + withdrawable + marginUsed). */
+  balance(user: `0x${string}`): Promise<BalanceState> {
+    return this.request<BalanceState>(
+      "GET",
+      `/balance?user=${encodeURIComponent(user)}`,
     );
   }
 

@@ -1,4 +1,23 @@
 /**
+ * HL clearinghouse balance for a wallet. Returned by GET /balance?user=0x...
+ *
+ * - `accountValue` is the total perp account value in USD (positions + USDC + unrealized PnL).
+ * - `withdrawable` is the USDC the user can withdraw right now (account value minus margin used).
+ * - `marginUsed` is the USDC currently posted as initial/maintenance margin for open positions.
+ *
+ * For "did the builder earn a fee" the right number to watch is `accountValue` —
+ * builder fee credits land in the perp account and bump it.
+ */
+export interface BalanceState {
+  user: `0x${string}`;
+  accountValue: string;
+  withdrawable: string;
+  marginUsed: string;
+  /** Number of open perp positions. */
+  openPositions: number;
+}
+
+/**
  * Approval-state response from GET /approval?user=0x...
  *
  * Maps Hyperliquid's `maxBuilderFee` raw int into something the UI can render.

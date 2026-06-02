@@ -44,8 +44,14 @@ const HL_BRIDGE_ARBITRUM = "0x2Df1c51E09aECF9cacB7bc98cB1742757f163dF7" as const
 // Native Circle USDC on Arbitrum (the variant HL accepts).
 const USDC_ARBITRUM = "0xaf88d065e77c8cC2239327C5EDb3A432268e5831" as const;
 
+// Internal-only feature flag. When true, /approve's approved state renders a
+// "Place test trade" card so we can smoke-test the fee-earning loop on mainnet
+// from inside our app. NOT product surface — the product is the API itself.
+const TEST_TRADE_ENABLED = process.env.NEXT_PUBLIC_ENABLE_TEST_TRADE === "true";
+
 import type {
   ApprovalState,
+  BalanceState,
   BuildResponse,
   SendResponse,
 } from "@alchemy-hl/sdk-preview";
@@ -246,16 +252,23 @@ export default function ApprovePage() {
             />
           )}
           {stateName === "approved" && (
-            <ApprovedCard
-              approval={approval!}
-              userAddress={userAddress!}
-              isEmbedded={isEmbedded}
-              onRevoke={() => runApproval("0%")}
-              onDisconnect={logout}
-              onFundWallet={() =>
-                userAddress && fundWallet(userAddress)
-              }
-            />
+            <>
+              <ApprovedCard
+                approval={approval!}
+                userAddress={userAddress!}
+                isEmbedded={isEmbedded}
+                onRevoke={() => runApproval("0%")}
+                onDisconnect={logout}
+                onFundWallet={() =>
+                  userAddress && fundWallet(userAddress)
+                }
+              />
+              {TEST_TRADE_ENABLED && userAddress && (
+                <div style={{ marginTop: 16 }}>
+                  <TestTradeCard userAddress={userAddress} />
+                </div>
+              )}
+            </>
           )}
           {stateName === "pending" && (
             <PendingCard
@@ -818,6 +831,407 @@ function DepositCard(props: {
     </CardShell>
   );
 }
+
+// ============================================================================
+// TestTradeCard — flag-gated, internal smoke test
+// ============================================================================
+
+/**
+ * Internal smoke-test surface. Not product UI. Rendered only when
+ * NEXT_PUBLIC_ENABLE_TEST_TRADE=true (see top-of-file constant).
+ *
+ * Drives the same build → sign → send /exchange flow real callers use,
+ * with sane defaults for a tiny BTC perp IOC order. Polls the builder's HL
+ * balance before/after so you can visually confirm the fee credited.
+ *
+ * Order shape:
+ *   { a: 0, b: true, p: "<high price>", s: <size>, r: false,
+ *     t: { limit: { tif: "Ioc" } } }
+ * For an IOC buy you set the limit *above* market so the order takes the ask
+ * side and fills immediately. The fill price is whatever's on the book, not
+ * the limit price.
+ */
+function TestTradeCard({ userAddress }: { userAddress: `0x${string}` }) {
+  // Form state. Defaults: BTC perp, buy, 0.0002 BTC, IOC limit auto-derived
+  // from live mark price below.
+  const [asset, setAsset] = useState("0");
+  const [side, setSide] = useState<"buy" | "sell">("buy");
+  const [size, setSize] = useState("0.0002");
+  const [price, setPrice] = useState("");
+  const [reduceOnly, setReduceOnly] = useState(false);
+
+  // Live mark price + auto-set the IOC limit to a safe distance from market
+  // (50% above mark for buys = safely takes the ask; 50% below for sells =
+  // safely takes the bid). Re-fetches on side change or asset change.
+  const [markPrice, setMarkPrice] = useState<number | null>(null);
+  const fetchMarkPrice = useCallback(async () => {
+    try {
+      const base = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080";
+      const res = await fetch(`${base}/markPrice?asset=${asset}`);
+      if (!res.ok) return;
+      const body = (await res.json()) as { mid: string };
+      const mid = Number(body.mid);
+      if (!Number.isFinite(mid)) return;
+      setMarkPrice(mid);
+      // Default the limit if user hasn't typed one yet; respect manual input.
+      setPrice((cur) => {
+        if (cur && cur.trim().length > 0) return cur;
+        const safeLimit = side === "buy" ? mid * 1.5 : mid * 0.5;
+        return safeLimit.toFixed(2);
+      });
+    } catch {
+      // Non-blocking; user can type a limit manually.
+    }
+  }, [asset, side]);
+
+  useEffect(() => {
+    void fetchMarkPrice();
+  }, [fetchMarkPrice]);
+
+  const [phase, setPhase] = useState<"idle" | "building" | "signing" | "sending" | "done" | "error">("idle");
+  const [result, setResult] = useState<SendResponse | null>(null);
+  const [errMsg, setErrMsg] = useState<string | null>(null);
+
+  // Builder's HL balance before/after — proof that the fee credited.
+  const [builderBalanceBefore, setBuilderBalanceBefore] = useState<BalanceState | null>(null);
+  const [builderBalanceAfter, setBuilderBalanceAfter] = useState<BalanceState | null>(null);
+
+  // We need wallet.getEthereumProvider() because L1 order actions use HL's
+  // phantom-agent envelope with chainId 1337 — wagmi's useSignTypedData
+  // rejects domains whose chainId doesn't match the active chain (42161).
+  // The EIP-1193 provider from each wallet (embedded or external) signs
+  // whatever domain you hand it, no chain check.
+  const { wallets } = useWallets();
+  const activeWallet = wallets.find((w) => w.address.toLowerCase() === userAddress.toLowerCase());
+  const builderAddr = BUILDER_ADDR as `0x${string}` | undefined;
+
+  const runTrade = useCallback(async () => {
+    setErrMsg(null);
+    setResult(null);
+    setBuilderBalanceAfter(null);
+    if (!activeWallet) {
+      setErrMsg("No active wallet found. Sign out and back in.");
+      setPhase("error");
+      return;
+    }
+    try {
+      // Snapshot the builder's HL balance pre-trade so we can show the delta.
+      if (builderAddr) {
+        try {
+          const before = await api.balance(builderAddr);
+          setBuilderBalanceBefore(before);
+        } catch {
+          // Non-blocking — proceed without baseline.
+        }
+      }
+
+      setPhase("building");
+      const built = (await api.build({
+        type: "order",
+        grouping: "na",
+        orders: [
+          {
+            a: Number(asset),
+            b: side === "buy",
+            p: price,
+            s: size,
+            r: reduceOnly,
+            t: { limit: { tif: "Ioc" } },
+          },
+        ],
+      })) as BuildResponse;
+      if (!built.typedData) throw new Error("Server did not return typedData.");
+
+      setPhase("signing");
+      // Sign via EIP-1193 directly to bypass wagmi's chain-id enforcement.
+      // The phantom-agent domain uses chainId 1337 by HL spec (not Arbitrum);
+      // wagmi rejects domain.chainId ≠ active chain. Raw provider doesn't.
+      // We must include EIP712Domain in `types` ourselves — wagmi adds it
+      // implicitly but raw eth_signTypedData_v4 requires it explicit.
+      const provider = await activeWallet.getEthereumProvider();
+      const typedWithDomain = {
+        domain: built.typedData.domain,
+        primaryType: built.typedData.primaryType,
+        message: built.typedData.message,
+        types: {
+          EIP712Domain: [
+            { name: "name", type: "string" },
+            { name: "version", type: "string" },
+            { name: "chainId", type: "uint256" },
+            { name: "verifyingContract", type: "address" },
+          ],
+          ...built.typedData.types,
+        },
+      };
+      const sigHex = (await provider.request({
+        method: "eth_signTypedData_v4",
+        params: [activeWallet.address, JSON.stringify(typedWithDomain)],
+      })) as `0x${string}`;
+      const sig = splitHexSig(sigHex);
+
+      setPhase("sending");
+      const sent = (await api.send(built.action, built.nonce, sig)) as SendResponse;
+      setResult(sent);
+      setPhase("done");
+
+      // Indexer needs a beat. Re-fetch builder balance after a short wait.
+      if (builderAddr) {
+        setTimeout(async () => {
+          try {
+            const after = await api.balance(builderAddr);
+            setBuilderBalanceAfter(after);
+          } catch {
+            // ignore
+          }
+        }, 4000);
+      }
+    } catch (err) {
+      const body = (err as { body?: { message?: string; guidance?: string } }).body;
+      // Show both message + guidance — message is HL's literal reason, guidance
+      // is ours. The literal reason is what tells you what's actually wrong.
+      const parts: string[] = [];
+      if (body?.message) parts.push(`HL: ${body.message}`);
+      if (body?.guidance) parts.push(body.guidance);
+      setErrMsg(parts.join("\n\n") || (err as Error).message);
+      setPhase("error");
+    }
+  }, [asset, side, price, size, reduceOnly, activeWallet, builderAddr]);
+
+  const inFlight = phase === "building" || phase === "signing" || phase === "sending";
+  const phaseLabel: Record<typeof phase, string> = {
+    idle: "",
+    building: "Building order…",
+    signing: "Confirm in Privy modal…",
+    sending: "Submitting to Hyperliquid…",
+    done: "",
+    error: "",
+  };
+
+  // Estimated builder fee from the API's default config (perps = 4 bps).
+  // Use mark price (live HL mid) for the estimate — the IOC limit is
+  // intentionally distant from market and doesn't reflect the fill price.
+  const sizeNum = Number(size);
+  const notional = sizeNum > 0 && markPrice ? sizeNum * markPrice : 0;
+  const estimatedBuilderFee = notional * 0.0004;
+
+  // After a successful fill, expose a one-click "Close position" affordance:
+  // flips side, checks reduce-only, swaps the IOC limit to the other side of
+  // mark, leaves size as-is. Same trade in reverse — closes the perp position.
+  const flipToClose = useCallback(() => {
+    setSide((s) => (s === "buy" ? "sell" : "buy"));
+    setReduceOnly(true);
+    if (markPrice) {
+      // Opposite side now → flip the safe-distance multiplier.
+      const newSide = side === "buy" ? "sell" : "buy";
+      setPrice((newSide === "buy" ? markPrice * 1.5 : markPrice * 0.5).toFixed(2));
+    }
+    setPhase("idle");
+    setResult(null);
+    setErrMsg(null);
+  }, [markPrice, side]);
+
+  // Manual refresh of the builder's HL balance — surfaces the actual fee
+  // delta even if the auto-poll fired before HL's indexer caught up.
+  const refreshBuilderBalance = useCallback(async () => {
+    if (!builderAddr) return;
+    try {
+      const fresh = await api.balance(builderAddr);
+      setBuilderBalanceAfter(fresh);
+    } catch {
+      // ignore
+    }
+  }, [builderAddr]);
+
+  const deltaUsd =
+    builderBalanceBefore && builderBalanceAfter
+      ? Number(builderBalanceAfter.accountValue) - Number(builderBalanceBefore.accountValue)
+      : null;
+
+  return (
+    <div className="approve-card" style={{ borderColor: "#5a4220" }}>
+      <header className="approve-head" style={{ background: "rgba(255,193,77,0.08)" }}>
+        <span className="brand">
+          <span style={{ fontSize: 16 }}>🧪</span>
+          <span>Test trade (internal, flag-gated)</span>
+        </span>
+      </header>
+      <div className="approve-body">
+        <p className="approve-sub" style={{ marginTop: 0 }}>
+          <strong>Not product surface.</strong> Renders only when{" "}
+          <code>NEXT_PUBLIC_ENABLE_TEST_TRADE=true</code>. Used to smoke-test the
+          fee-earning loop end-to-end on mainnet from inside our app. Agents would call
+          <code> POST /exchange</code> directly.
+        </p>
+
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 14 }}>
+          <label>
+            <div style={{ fontSize: 12, color: "var(--fg-dim)", marginBottom: 4 }}>Asset index</div>
+            <input
+              value={asset}
+              onChange={(e) => setAsset(e.target.value)}
+              style={fieldStyle}
+              disabled={inFlight}
+            />
+            <div style={{ fontSize: 11, color: "var(--fg-dim)", marginTop: 4 }}>
+              0 = BTC perp, 1 = ETH perp, …
+            </div>
+          </label>
+          <label>
+            <div style={{ fontSize: 12, color: "var(--fg-dim)", marginBottom: 4 }}>Side</div>
+            <select
+              value={side}
+              onChange={(e) => setSide(e.target.value as "buy" | "sell")}
+              style={fieldStyle}
+              disabled={inFlight}
+            >
+              <option value="buy">buy</option>
+              <option value="sell">sell</option>
+            </select>
+          </label>
+          <label>
+            <div style={{ fontSize: 12, color: "var(--fg-dim)", marginBottom: 4 }}>Size (base)</div>
+            <input
+              value={size}
+              onChange={(e) => setSize(e.target.value)}
+              style={fieldStyle}
+              disabled={inFlight}
+            />
+          </label>
+          <label>
+            <div style={{ fontSize: 12, color: "var(--fg-dim)", marginBottom: 4 }}>
+              Limit price (IOC takes whatever's better)
+            </div>
+            <input
+              value={price}
+              onChange={(e) => setPrice(e.target.value)}
+              style={fieldStyle}
+              disabled={inFlight}
+            />
+          </label>
+        </div>
+
+        <label style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 14, fontSize: 13 }}>
+          <input
+            type="checkbox"
+            checked={reduceOnly}
+            onChange={(e) => setReduceOnly(e.target.checked)}
+            disabled={inFlight}
+          />
+          Reduce-only (closes existing position; won't open a new one)
+        </label>
+
+        <div style={{ fontSize: 12, color: "var(--fg-dim)", marginBottom: 14, lineHeight: 1.6 }}>
+          {markPrice ? (
+            <>
+              Mark price: <strong style={{ color: "var(--fg-muted)" }}>${markPrice.toLocaleString()}</strong>
+              {" · "}
+              Est. notional at mark: <strong style={{ color: "var(--fg-muted)" }}>${notional.toFixed(2)}</strong>
+              {" · "}
+              Est. builder fee (4 bps): <strong style={{ color: "var(--success-soft)" }}>${estimatedBuilderFee.toFixed(4)}</strong>
+              {" · "}
+              <button
+                type="button"
+                onClick={fetchMarkPrice}
+                style={{ background: "none", border: 0, color: "var(--accent)", cursor: "pointer", padding: 0, fontSize: 11 }}
+              >
+                refresh
+              </button>
+            </>
+          ) : (
+            <>Loading mark price… (notional shown after price loads)</>
+          )}
+        </div>
+
+        <button
+          className={`btn btn-primary btn-block${inFlight ? " btn-disabled" : ""}`}
+          onClick={runTrade}
+          disabled={inFlight}
+        >
+          {inFlight ? phaseLabel[phase] : "Place test trade"}
+        </button>
+
+        {phase === "error" && errMsg && (
+          <div className="error-banner" style={{ marginTop: 14 }}>
+            <span className="ic">!</span>
+            <div>
+              <div className="ttl">Trade failed</div>
+              <div style={{ whiteSpace: "pre-wrap" }}>{errMsg}</div>
+            </div>
+          </div>
+        )}
+
+        {phase === "done" && result && (
+          <div style={{ marginTop: 14 }}>
+            <div className="approved-badge" style={{ marginBottom: 14 }}>
+              <span className="check">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12l5 5L20 7" /></svg>
+              </span>
+              <div>
+                <div className="ttl">Trade submitted</div>
+                <div className="meta">
+                  Signer: {shortAddr(result.user)}
+                  {deltaUsd !== null && (
+                    <> · Builder Δ: <strong>${deltaUsd.toFixed(4)}</strong> {deltaUsd > 0 ? "✓" : "(awaiting fill / indexer)"}</>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            {/* Action row: close position + refresh balance */}
+            <div style={{ display: "flex", gap: 8, marginBottom: 14 }}>
+              {!reduceOnly && (
+                <button
+                  className="btn btn-primary"
+                  onClick={flipToClose}
+                  style={{ flex: 1, justifyContent: "center" }}
+                >
+                  Close position (flip & retry)
+                </button>
+              )}
+              <button
+                className="btn btn-secondary"
+                onClick={refreshBuilderBalance}
+                style={{ flex: 1, justifyContent: "center" }}
+              >
+                Refresh builder balance
+              </button>
+            </div>
+
+            <details className="details">
+              <summary>HL response</summary>
+              <pre>{JSON.stringify(result.exchangeResponse, null, 2)}</pre>
+            </details>
+            {builderBalanceBefore && (
+              <details className="details" style={{ marginTop: 8 }}>
+                <summary>Builder HL balance before / after</summary>
+                <pre>
+{`before: $${builderBalanceBefore.accountValue}
+after:  ${builderBalanceAfter ? "$" + builderBalanceAfter.accountValue : "(polling…)"}
+delta:  ${deltaUsd !== null ? "$" + deltaUsd.toFixed(6) : "—"}
+
+Note: HL's accountValue may have limited precision. Sub-cent fee credits
+on a $100 balance often surface as "100.0" exactly. Use a fresh curl to
+api /balance for raw HL response if you need to see fractional builder fees.`}
+                </pre>
+              </details>
+            )}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+const fieldStyle: React.CSSProperties = {
+  width: "100%",
+  background: "rgba(0,0,0,0.25)",
+  border: "1px solid var(--border)",
+  borderRadius: 8,
+  padding: "8px 10px",
+  color: "var(--fg)",
+  fontFamily: "var(--font-mono)",
+  fontSize: 13,
+};
 
 // ============================================================================
 // Helpers

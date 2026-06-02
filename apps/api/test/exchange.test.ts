@@ -76,7 +76,17 @@ describe("builder injection", () => {
     const action = makeOrder(0); // perp asset
     injectBuilder(action, cfg);
     expect(action.builder?.b.toLowerCase()).toBe(TEST_BUILDER_LOWER);
-    expect(action.builder?.f).toBe(4);
+    // HL wire format is tenths of basis points: 4 bps configured → f=40 on the wire.
+    expect(action.builder?.f).toBe(40);
+  });
+
+  it("emits builder.b lowercased — HL hashes addresses lowercase", () => {
+    const cfg = loadConfig(baseEnv);
+    const action = makeOrder(0);
+    injectBuilder(action, cfg);
+    // The address must be byte-identical to lowercase form, not just case-insensitive
+    // equal — msgpack encodes strings literally and HL canonicalizes to lowercase.
+    expect(action.builder?.b).toBe(TEST_BUILDER_LOWER);
   });
 
   it("attaches spot fee when the leg is a spot asset (>= 10000)", () => {
@@ -84,7 +94,8 @@ describe("builder injection", () => {
     const action = makeOrder(10001); // spot
     injectBuilder(action, cfg);
     expect(action.builder?.b.toLowerCase()).toBe(TEST_BUILDER_LOWER);
-    expect(action.builder?.f).toBe(5);
+    // 5 bps configured → f=50 on the wire (tenths of bps).
+    expect(action.builder?.f).toBe(50);
   });
 
   it("rejects a mismatched builder in the incoming action", () => {
@@ -143,7 +154,9 @@ describe("POST /exchange — build phase", () => {
     expect(body.action.type).toBe("order");
     if (body.action.type !== "order") return;
     expect(body.action.builder?.b.toLowerCase()).toBe(TEST_BUILDER_LOWER);
-    expect(body.action.builder?.f).toBe(4);
+    // f is on the wire in tenths of bps: 4 bps configured → 40 on the wire.
+    expect(body.action.builder?.f).toBe(40);
+    // builderFee in the BuildResponse stays in bps for caller ergonomics.
     expect(body.builderFee).toBe(4);
     expect(body.builder.toLowerCase()).toBe(TEST_BUILDER_LOWER);
     expect(body.isSpot).toBe(false);
@@ -313,6 +326,62 @@ describe("signature recovery", () => {
       expect(sent.user.toLowerCase()).not.toBe(account.address.toLowerCase());
     } else {
       expect(sendRes.statusCode).toBeGreaterThanOrEqual(400);
+    }
+  });
+});
+
+describe("v normalization on send", () => {
+  it("normalizes v=0 → v=27 in the HL forwarding payload", async () => {
+    const app = await buildApp();
+    try {
+      const pk = generatePrivateKey();
+      const account = privateKeyToAccount(pk);
+
+      const buildRes = await app.inject({
+        method: "POST",
+        url: "/exchange",
+        payload: { action: makeOrder(0) },
+      });
+      const built = buildRes.json() as BuildResponse;
+      if (!built.typedData) throw new Error("missing typedData");
+
+      const sigHex = await account.signTypedData({
+        domain: built.typedData.domain,
+        types: built.typedData.types,
+        primaryType: built.typedData.primaryType,
+        message: built.typedData.message,
+      });
+      const sig = splitHexSig(sigHex);
+
+      // Force the test client to send v in 0/1 format (some Privy embedded
+      // wallets via raw EIP-1193 do this). Recovery should still succeed
+      // because viem normalizes; the forwarded payload to HL should have v=27.
+      const yParitySig = { ...sig, v: sig.v - 27 };
+      expect(yParitySig.v).toBeLessThan(2);
+
+      let capturedHlBody: { signature?: { v: number } } | undefined;
+      vi.spyOn(globalThis, "fetch").mockImplementationOnce(async (_url, init) => {
+        if (init?.body && typeof init.body === "string") {
+          capturedHlBody = JSON.parse(init.body);
+        }
+        return new Response(JSON.stringify({ status: "ok", response: { type: "order" } }), {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        });
+      });
+
+      const sendRes = await app.inject({
+        method: "POST",
+        url: "/exchange",
+        payload: { action: built.action, nonce: built.nonce, signature: yParitySig },
+      });
+      expect(sendRes.statusCode).toBe(200);
+      expect(capturedHlBody?.signature?.v).toBeGreaterThanOrEqual(27);
+      expect(capturedHlBody?.signature?.v).toBeLessThanOrEqual(28);
+    } finally {
+      // Clean up the spy at the test's end (not via afterEach since other tests
+      // in this file rely on a clean fetch spy).
+      vi.restoreAllMocks();
     }
   });
 });
