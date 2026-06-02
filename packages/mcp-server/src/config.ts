@@ -1,22 +1,34 @@
 /**
  * MCP server config. Loaded from env at process start.
  *
+ * The server runs in one of two transport modes — stdio (default, for Claude
+ * desktop) or http (for Claude Web + ChatGPT + any hosted MCP host). Pick via
+ * MCP_TRANSPORT.
+ *
+ * Auth:
+ *   - stdio mode: ALCHEMY_HL_TRADE_KEY is a hot private key on this process.
+ *     One key = one user. Suitable for single-user power-user setups.
+ *   - http mode:  per-request auth via Authorization: Bearer <privy-jwt> from
+ *     the calling host (Claude/ChatGPT). MCP server forwards the JWT to the
+ *     backend's /agent/exchange path; backend signs with the user's per-user
+ *     agent key. Multi-tenant. No keys on this process.
+ *
  * Env vars:
- *   ALCHEMY_HL_API_URL   - URL of our backend's /exchange API
- *                          (default: http://localhost:8080)
- *   ALCHEMY_HL_TRADE_KEY - Hot key for trading. Optional — if absent,
- *                          write tools (place_*, cancel_*) return "no
- *                          signer configured" and the connector becomes
- *                          read-only.
- *   LOG_LEVEL            - "debug" | "info" | "warn" | "error"
- *                          (default: "info", logs to stderr only — stdout
- *                          is reserved for MCP protocol JSON-RPC frames)
+ *   ALCHEMY_HL_API_URL    URL of our backend's /exchange API (default localhost:8080)
+ *   MCP_TRANSPORT         "stdio" | "http"  (default "stdio")
+ *   MCP_PORT              http listen port  (default 3001, only used when http)
+ *   ALCHEMY_HL_TRADE_KEY  hot key for stdio mode (32 bytes hex, optional → read-only mode)
+ *   LOG_LEVEL             "debug" | "info" | "warn" | "error" (default "info")
+ *                         logs go to stderr only in stdio mode (protocol owns stdout);
+ *                         http mode logs may also go to stdout.
  */
 
 import { z } from "zod";
 
 const ConfigSchema = z.object({
   ALCHEMY_HL_API_URL: z.string().url().default("http://localhost:8080"),
+  MCP_TRANSPORT: z.enum(["stdio", "http"]).default("stdio"),
+  MCP_PORT: z.coerce.number().int().min(1).max(65535).default(3001),
   ALCHEMY_HL_TRADE_KEY: z
     .string()
     .regex(/^0x[0-9a-fA-F]{64}$/, "must be 0x + 64 hex chars (32 bytes)")
@@ -41,9 +53,10 @@ const LEVELS: Record<Config["LOG_LEVEL"], number> = {
 };
 
 /**
- * Logger that writes to stderr. CRITICAL: MCP protocol uses stdout for
- * JSON-RPC frames; anything we write to stdout breaks the transport. All
- * logging must go to stderr.
+ * Logger that writes to stderr. CRITICAL in stdio mode: MCP protocol uses
+ * stdout for JSON-RPC frames; anything we write to stdout breaks the
+ * transport. In http mode logging to stderr is still fine and matches the
+ * stdio mode's behavior for log consistency.
  */
 export function makeLogger(cfg: Config) {
   const threshold = LEVELS[cfg.LOG_LEVEL];

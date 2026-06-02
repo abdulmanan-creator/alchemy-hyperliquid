@@ -1,19 +1,19 @@
 /**
  * MCP tool definitions for the Alchemy Hyperliquid connector.
  *
- * Each tool has:
- *   - name: function-style (`place_market_order`); Claude infers when to call from name + description
- *   - description: one-paragraph natural language, written for Claude not humans
- *   - inputSchema: zod, exported as JSON Schema for MCP transport
- *   - handler: async (args) => result string. Result is what Claude sees in chat.
+ * Each tool's handler receives (args, auth):
+ *   - args: zod-validated tool arguments
+ *   - auth: per-request auth context. agentJwt populated in http transport
+ *           mode when the Authorization header is present; empty otherwise.
  *
- * Read-only tools work without a signer. Write tools (place_*, cancel_*,
- * approve_builder) return a "no signer configured" stub message if
- * ALCHEMY_HL_TRADE_KEY isn't set — useful for offering Claude a research-only
- * agent without trading authority.
+ * Write tools pick the right SDK instance:
+ *   - If agentJwt is present → agent-mode SDK that POSTs /agent/exchange.
+ *     The user signed approveAgent in advance; server signs each trade.
+ *   - Else if ALCHEMY_HL_TRADE_KEY is set → hot-key SDK signs locally.
+ *     This is the stdio / single-user path.
+ *   - Else → tool returns a "no signer" stub message.
  *
- * The hot-key signing model is a Phase-1 simplification. Phase-2 (API
- * wallets) replaces it with per-user agent wallets keyed off a Privy session.
+ * Read-only tools (get_*) use a no-auth read SDK and ignore auth context.
  */
 
 import { z } from "zod";
@@ -21,25 +21,51 @@ import { Alchemy, AlchemyHlError } from "@alchemy-hl/sdk";
 
 import type { Config } from "./config.js";
 
+/**
+ * Per-request auth context. In stdio mode this is always empty (single-tenant,
+ * uses the process-level hot key). In http mode the transport extracts a
+ * Bearer token from the Authorization header and passes it in.
+ */
+export interface AuthContext {
+  /** Privy JWT, set in http mode when Authorization: Bearer ... is present. */
+  agentJwt?: string;
+}
+
 export interface Tool {
   name: string;
   description: string;
   inputSchema: z.ZodTypeAny;
-  handler: (args: unknown) => Promise<string>;
+  handler: (args: unknown, auth: AuthContext) => Promise<string>;
 }
 
 export function buildTools(cfg: Config): Tool[] {
-  // One SDK instance per server boot. Caches the asset map, reuses fetch.
-  const sdk = new Alchemy({
-    baseUrl: cfg.ALCHEMY_HL_API_URL,
-    ...(cfg.ALCHEMY_HL_TRADE_KEY
-      ? { privateKey: cfg.ALCHEMY_HL_TRADE_KEY as `0x${string}` }
-      : {}),
-  });
+  // Hot-key SDK: one per process if a key is configured. Used in stdio mode
+  // and as a fallback in http mode when a request arrives without auth.
+  const hotSdk = cfg.ALCHEMY_HL_TRADE_KEY
+    ? new Alchemy({
+        baseUrl: cfg.ALCHEMY_HL_API_URL,
+        privateKey: cfg.ALCHEMY_HL_TRADE_KEY as `0x${string}`,
+      })
+    : null;
 
-  const requireSigner = (toolName: string): string | null => {
-    if (cfg.hasSigner) return null;
-    return `Cannot execute ${toolName}: no trading key configured on the MCP server. Set ALCHEMY_HL_TRADE_KEY in the server's environment to enable write operations. Read-only tools still work.`;
+  // Read-only SDK: no signer, no JWT — used by get_* tools so reads work in
+  // any transport without auth.
+  const readSdk = new Alchemy({ baseUrl: cfg.ALCHEMY_HL_API_URL });
+
+  /** Pick the SDK for a write tool based on the request auth. */
+  function sdkForWrite(auth: AuthContext): Alchemy | null {
+    if (auth.agentJwt) {
+      return new Alchemy({
+        baseUrl: cfg.ALCHEMY_HL_API_URL,
+        agentJwt: auth.agentJwt,
+      });
+    }
+    return hotSdk;
+  }
+
+  const requireSigner = (toolName: string, auth: AuthContext): string | null => {
+    if (auth.agentJwt || cfg.hasSigner) return null;
+    return `Cannot execute ${toolName}: no auth available. In http transport mode, the calling host (Claude/ChatGPT) must pass Authorization: Bearer <privy-jwt>. In stdio mode, set ALCHEMY_HL_TRADE_KEY on the server. Read-only tools still work.`;
   };
 
   return [
@@ -68,7 +94,7 @@ export function buildTools(cfg: Config): Tool[] {
         const args = z
           .object({ type: z.enum(["perp", "spot", "all"]).default("all"), limit: z.number().int().positive().max(500).optional() })
           .parse(rawArgs ?? {});
-        const m = await sdk.markets();
+        const m = await readSdk.markets();
         const out: Record<string, unknown> = {};
         if (args.type === "perp" || args.type === "all") {
           out.perps = (args.limit ? m.perps.slice(0, args.limit) : m.perps).map((p) => ({
@@ -100,8 +126,8 @@ export function buildTools(cfg: Config): Tool[] {
       }),
       async handler(rawArgs) {
         const { symbol } = z.object({ symbol: z.string() }).parse(rawArgs);
-        const asset = await sdk.resolveAsset(symbol);
-        const mp = await sdk.markPrice(asset.assetIndex);
+        const asset = await readSdk.resolveAsset(symbol);
+        const mp = await readSdk.markPrice(asset.assetIndex);
         return JSON.stringify({ symbol: mp.coin, mid: mp.mid }, null, 2);
       },
     },
@@ -121,8 +147,26 @@ export function buildTools(cfg: Config): Tool[] {
         const { user } = z
           .object({ user: z.string().regex(/^0x[0-9a-fA-F]{40}$/).optional() })
           .parse(rawArgs ?? {});
-        const bal = await sdk.balance(user as `0x${string}` | undefined);
-        return JSON.stringify(bal, null, 2);
+        if (user) {
+          const bal = await readSdk.balance(user as `0x${string}`);
+          return JSON.stringify(bal, null, 2);
+        }
+        // No user → fall back to whatever wallet the configured signer
+        // controls. The hot-key SDK can do this; agent-mode SDK can't (its
+        // JWT identifies a user but we don't expose that here). Tell Claude
+        // to pass `user` explicitly in that case.
+        if (hotSdk) {
+          const bal = await hotSdk.balance();
+          return JSON.stringify(bal, null, 2);
+        }
+        return JSON.stringify(
+          {
+            error:
+              "Pass `user` explicitly. The default-to-signer fallback only works in stdio (hot-key) mode.",
+          },
+          null,
+          2,
+        );
       },
     },
 
@@ -137,8 +181,15 @@ export function buildTools(cfg: Config): Tool[] {
         const { user } = z
           .object({ user: z.string().regex(/^0x[0-9a-fA-F]{40}$/).optional() })
           .parse(rawArgs ?? {});
-        const orders = await sdk.openOrders(user as `0x${string}` | undefined);
-        return JSON.stringify(orders, null, 2);
+        if (user) {
+          const orders = await readSdk.openOrders(user as `0x${string}`);
+          return JSON.stringify(orders, null, 2);
+        }
+        if (hotSdk) {
+          const orders = await hotSdk.openOrders();
+          return JSON.stringify(orders, null, 2);
+        }
+        return JSON.stringify({ error: "Pass `user` explicitly in http mode." }, null, 2);
       },
     },
 
@@ -153,8 +204,15 @@ export function buildTools(cfg: Config): Tool[] {
         const { user } = z
           .object({ user: z.string().regex(/^0x[0-9a-fA-F]{40}$/).optional() })
           .parse(rawArgs ?? {});
-        const approval = await sdk.approval(user as `0x${string}` | undefined);
-        return JSON.stringify(approval, null, 2);
+        if (user) {
+          const approval = await readSdk.approval(user as `0x${string}`);
+          return JSON.stringify(approval, null, 2);
+        }
+        if (hotSdk) {
+          const approval = await hotSdk.approval();
+          return JSON.stringify(approval, null, 2);
+        }
+        return JSON.stringify({ error: "Pass `user` explicitly in http mode." }, null, 2);
       },
     },
 
@@ -176,8 +234,8 @@ export function buildTools(cfg: Config): Tool[] {
           .optional()
           .describe("If true, this order can only reduce an existing position. Use for closing trades."),
       }),
-      async handler(rawArgs) {
-        const lock = requireSigner("place_market_order");
+      async handler(rawArgs, auth) {
+        const lock = requireSigner("place_market_order", auth);
         if (lock) return lock;
         const args = z
           .object({
@@ -188,6 +246,7 @@ export function buildTools(cfg: Config): Tool[] {
             reduceOnly: z.boolean().optional(),
           })
           .parse(rawArgs);
+        const sdk = sdkForWrite(auth)!;
         try {
           const fn = args.side === "buy" ? sdk.marketBuy.bind(sdk) : sdk.marketSell.bind(sdk);
           const result = await fn(args.symbol, {
@@ -228,8 +287,8 @@ export function buildTools(cfg: Config): Tool[] {
         tif: z.enum(["Gtc", "Ioc", "Alo"]).default("Gtc"),
         reduceOnly: z.boolean().optional(),
       }),
-      async handler(rawArgs) {
-        const lock = requireSigner("place_limit_order");
+      async handler(rawArgs, auth) {
+        const lock = requireSigner("place_limit_order", auth);
         if (lock) return lock;
         const args = z
           .object({
@@ -241,6 +300,7 @@ export function buildTools(cfg: Config): Tool[] {
             reduceOnly: z.boolean().optional(),
           })
           .parse(rawArgs);
+        const sdk = sdkForWrite(auth)!;
         try {
           const result = await sdk.limitOrder({
             symbol: args.symbol,
@@ -277,12 +337,13 @@ export function buildTools(cfg: Config): Tool[] {
         symbol: z.string(),
         oid: z.number().int().positive(),
       }),
-      async handler(rawArgs) {
-        const lock = requireSigner("cancel_order");
+      async handler(rawArgs, auth) {
+        const lock = requireSigner("cancel_order", auth);
         if (lock) return lock;
         const args = z
           .object({ symbol: z.string(), oid: z.number().int().positive() })
           .parse(rawArgs);
+        const sdk = sdkForWrite(auth)!;
         try {
           const result = await sdk.cancel({ symbol: args.symbol, oid: args.oid });
           // cancel returns SendResponse (no per-order fill data to parse).
@@ -307,12 +368,25 @@ export function buildTools(cfg: Config): Tool[] {
           .regex(/^\d+(\.\d+)?%$/)
           .describe("Percent string like '1%' or '0.04%'. Pass '0%' to revoke."),
       }),
-      async handler(rawArgs) {
-        const lock = requireSigner("approve_builder");
+      async handler(rawArgs, auth) {
+        const lock = requireSigner("approve_builder", auth);
         if (lock) return lock;
+        // approveBuilderFee MUST come from the user's primary signature —
+        // refuse the agent-mode path explicitly with a clear message.
+        if (auth.agentJwt) {
+          return JSON.stringify(
+            {
+              ok: false,
+              error: "approve_builder requires the user's primary wallet signature. From an agent-authed connector this isn't possible — direct the user to the web /approve page to sign approveBuilderFee there.",
+            },
+            null,
+            2,
+          );
+        }
         const { maxFeeRate } = z
           .object({ maxFeeRate: z.string().regex(/^\d+(\.\d+)?%$/) })
           .parse(rawArgs);
+        const sdk = hotSdk!;
         try {
           const result = await sdk.approveBuilder({ maxFeeRate });
           // approveBuilder returns SendResponse (no fill data).

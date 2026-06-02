@@ -78,6 +78,17 @@ export type ClientOptions = {
    * `globalThis.fetch`.
    */
   fetch?: typeof fetch;
+  /**
+   * Privy JWT for agent-mode signing. When set, trading methods route
+   * through POST /agent/exchange instead of POST /exchange — the backend
+   * signs with the user's per-user agent key (no local signer needed,
+   * no per-trade browser popup). Mutually exclusive with `privateKey` /
+   * external signer config: pass exactly one auth model.
+   *
+   * The user must have previously signed approveAgent through the normal
+   * /exchange flow for the agent to be authorized.
+   */
+  agentJwt?: string;
 } & Partial<SignerConfig>;
 
 const DEFAULT_BASE_URL = "http://localhost:8080";
@@ -85,6 +96,7 @@ const DEFAULT_BASE_URL = "http://localhost:8080";
 export class Alchemy {
   readonly baseUrl: string;
   private readonly signer: Signer | null;
+  private readonly agentJwt: string | null;
   private readonly fetchOverride?: typeof fetch;
   private readonly assets: AssetCache;
 
@@ -96,7 +108,13 @@ export class Alchemy {
         "No fetch implementation found. Pass `fetch` in client options.",
       );
     }
+    if (isSignerConfig(opts) && opts.agentJwt) {
+      throw new SdkInputError(
+        "Pass either a signer (privateKey / external) OR agentJwt — not both. Agent mode delegates signing to the backend; user-signed mode signs locally.",
+      );
+    }
     this.signer = isSignerConfig(opts) ? makeSigner(opts) : null;
+    this.agentJwt = opts.agentJwt ?? null;
     this.assets = new AssetCache(() => this.markets());
   }
 
@@ -222,8 +240,17 @@ export class Alchemy {
    * Sign the one-time approveBuilderFee authorization. After this lands, all
    * subsequent orders this wallet places through Alchemy get the builder fee
    * injected (within the approved ceiling).
+   *
+   * Always requires a user-key signer (hot key or external) — refuses
+   * agent-mode since approveBuilderFee must come from the user's primary
+   * wallet to be a valid authorization.
    */
   async approveBuilder(opts: { maxFeeRate: string }): Promise<SendResponse> {
+    if (this.agentJwt) {
+      throw new SdkInputError(
+        "approveBuilder requires a user-key signer. Agent mode delegates trading but the user must sign approveBuilderFee themselves.",
+      );
+    }
     const action = buildApproveBuilderFee(opts.maxFeeRate);
     return this.signAndSend(action);
   }
@@ -256,6 +283,12 @@ export class Alchemy {
   }
 
   private async signAndSend(action: unknown): Promise<SendResponse> {
+    // Agent mode: backend signs server-side via the user's derived agent key.
+    // No build/sign dance — single POST to /agent/exchange with the JWT.
+    if (this.agentJwt) {
+      return this.agentSend(action);
+    }
+
     const signer = this.requireSigner();
 
     // Phase A: build — let the backend inject builder + return typed-data.
@@ -287,6 +320,15 @@ export class Alchemy {
     });
   }
 
+  /**
+   * Single-call submission via the agent-signing path. Backend authenticates
+   * the JWT, derives the user's agent key from AGENT_MASTER_SEED, signs the
+   * action, forwards to HL. Used by the MCP server when serving Claude/ChatGPT.
+   */
+  private async agentSend(action: unknown): Promise<SendResponse> {
+    return this.request<SendResponse>("POST", "/agent/exchange", { action });
+  }
+
   private get<T>(path: string): Promise<T> {
     return this.request<T>("GET", path);
   }
@@ -297,10 +339,18 @@ export class Alchemy {
 
   private async request<T>(method: string, path: string, body?: unknown): Promise<T> {
     const init: RequestInit = { method };
+    const headers: Record<string, string> = {};
     if (body !== undefined) {
-      init.headers = { "content-type": "application/json" };
+      headers["content-type"] = "application/json";
       init.body = JSON.stringify(body);
     }
+    // Attach Bearer token when in agent mode — backend uses it for the
+    // /agent/exchange path's Privy JWT verification. Harmless on read-only
+    // calls that ignore the header.
+    if (this.agentJwt) {
+      headers.authorization = `Bearer ${this.agentJwt}`;
+    }
+    if (Object.keys(headers).length > 0) init.headers = headers;
     const res = await this.fetchImpl(`${this.baseUrl}${path}`, init);
     const text = await res.text();
     let parsed: unknown = null;

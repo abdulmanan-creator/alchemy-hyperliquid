@@ -1,12 +1,9 @@
 /**
- * /connect/claude — step-by-step setup walkthrough for the Claude desktop MCP
- * connector. Mirrors liquid.trade/coinvest's setup flow stylistically (numbered
- * steps, code blocks with copy buttons, callouts for prereqs).
+ * /connect/claude — step-by-step setup walkthrough for the Claude Web /
+ * Claude desktop MCP connector.
  *
- * The flow assumes the user has already approved Alchemy as a builder for a
- * test wallet (so they're at "configure Claude desktop to use the connector"
- * stage, not "create a HL account from scratch" stage). Earlier steps point
- * them to /approve if they haven't.
+ * Default flow assumes hosted MCP (agent-mode auth via Privy JWT). A footer
+ * callout points power users to the local stdio install for hot-key signing.
  */
 
 import Link from "next/link";
@@ -14,6 +11,8 @@ import Link from "next/link";
 import { Nav } from "@/components/Nav";
 import { CodeBlock } from "@/components/CodeBlock";
 import { Footer } from "@/components/Footer";
+
+const MCP_URL = "https://api.alchemy.com/hyperliquid/mcp"; // placeholder until deployed
 
 export default function ConnectClaudePage() {
   return (
@@ -24,148 +23,89 @@ export default function ConnectClaudePage() {
           <span className="eyebrow">AI Connector</span>
           <h1>Trade with Claude</h1>
           <p>
-            Add nine Hyperliquid trading tools to Claude desktop via the Model
-            Context Protocol. Ask Claude in natural language and it calls the
-            tools for you.
+            Add nine Hyperliquid trading tools to Claude. Ask in natural
+            language; Claude calls the tools, our backend signs trades using
+            an agent key you authorized once.
           </p>
         </header>
 
         <div className="callout">
-          <strong>Prereqs:</strong> Claude desktop installed, Node 20+, a
-          funded Hyperliquid account, and you&apos;ve already approved
-          Alchemy as a builder for that wallet. If not,{" "}
-          <Link href="/approve">start with /approve</Link> to onboard a wallet,
-          then come back.
+          <strong>Prereqs:</strong> Hyperliquid account with USDC deposited.
+          If you haven&apos;t onboarded yet,{" "}
+          <Link href="/approve">/approve</Link> walks you through Privy
+          sign-in + builder approval + deposit.
         </div>
 
-        <Step n={1} title="Generate a fresh test wallet">
+        <Step n={1} title="Copy the MCP URL">
           <p>
-            Don&apos;t use your personal MetaMask &mdash; Claude desktop runs
-            the connector with the wallet&apos;s private key in plaintext env.
-            Better to use a dedicated key.
+            This is the URL you&apos;ll paste into Claude as a custom MCP
+            server.
           </p>
-          <CodeBlock label="bash">
-            {`cd packages/sdk
-npx tsx scripts/generate-test-wallet.ts`}
-          </CodeBlock>
+          <CodeBlock label="MCP server URL">{MCP_URL}</CodeBlock>
+        </Step>
+
+        <Step n={2} title="Open Claude → Settings → Connectors → Add custom">
           <p>
-            Save the printed <code>privateKey</code>. Send ~$10 USDC + ~$1
-            of ETH (Arbitrum One) to the printed address.
+            In Claude Web (or Claude desktop, both work): Settings → Connectors
+            → &ldquo;Add custom connector.&rdquo; In Claude desktop you may
+            need to enable Developer mode in Advanced settings to see this
+            option.
           </p>
         </Step>
 
-        <Step n={2} title="Deposit USDC into Hyperliquid + approve builder">
+        <Step n={3} title='Set Name to "Alchemy Hyperliquid", paste the URL'>
           <p>
-            From the test wallet, send USDC to HL&apos;s Bridge2 contract on
-            Arbitrum. We have a worked example at{" "}
-            <code>packages/sdk/scripts/smoke-trade.ts</code> &mdash; it deposits,
-            approves the builder fee, places a tiny test trade, and closes the
-            position. Run it once to bootstrap the wallet:
-          </p>
-          <CodeBlock label="bash">
-            {`# .env at repo root:
-#   TEST_WALLET_PK=0x<from step 1>
-cd packages/sdk
-npx tsx scripts/smoke-trade.ts`}
-          </CodeBlock>
-          <p>
-            After this completes, the wallet has an HL balance and Alchemy is
-            approved as its builder at 1%.
+            Paste the URL from step 1 into &ldquo;Remote MCP server URL&rdquo;
+            and save. Claude fetches our tool list and shows the nine
+            available functions.
           </p>
         </Step>
 
-        <Step n={3} title="Build the MCP server">
-          <CodeBlock label="bash">
-            {`# From the repo root:
-npm install
-npm run build -w @alchemy-hl/shared
-npm run build -w @alchemy-hl/sdk
-npm run build -w @alchemy-hl/mcp-server`}
-          </CodeBlock>
+        <Step n={4} title="Connect + authorize agent">
           <p>
-            This produces <code>packages/mcp-server/dist/index.js</code>. That&apos;s
-            the file Claude desktop will spawn.
+            Click <strong>Connect</strong> next to the new connector. Claude
+            opens our auth page. Sign in with Privy (same account you use at{" "}
+            <Link href="/approve">/approve</Link>), then sign one{" "}
+            <code>approveAgent</code> action delegating trading authority to
+            our server-managed agent wallet. After this single signature,
+            Claude can trade on your behalf with no further prompts.
           </p>
-        </Step>
-
-        <Step n={4} title="Add the connector to Claude desktop">
-          <p>
-            Open{" "}
-            <code>~/Library/Application Support/Claude/claude_desktop_config.json</code>
-            {" "}(macOS &mdash; create the file if it doesn&apos;t exist; on
-            Windows / Linux, see Anthropic&apos;s docs for the path). Paste this
-            block, replacing <code>/absolute/path/to/repo</code> and{" "}
-            <code>0x...</code> with your values:
-          </p>
-          <CodeBlock label="claude_desktop_config.json">
-{`{
-  "mcpServers": {
-    "alchemy-hyperliquid": {
-      "command": "node",
-      "args": [
-        "/absolute/path/to/repo/packages/mcp-server/dist/index.js"
-      ],
-      "env": {
-        "ALCHEMY_HL_API_URL": "http://localhost:8080",
-        "ALCHEMY_HL_TRADE_KEY": "0x<test wallet private key>"
-      }
-    }
-  }
-}`}
-          </CodeBlock>
-          <div className="callout warn">
-            <strong>Don&apos;t commit this file.</strong> It contains a private
-            key. Keep it in your local config directory only.
+          <div className="callout">
+            <strong>What you&apos;re authorizing:</strong> a per-user agent
+            key derived deterministically from a server-side master seed. The
+            agent has <em>trade-only</em> authority &mdash; HL&apos;s protocol
+            enforces that agents can&apos;t withdraw your funds. You can
+            revoke any time by signing approveAgent again with the zero
+            address.
           </div>
         </Step>
 
-        <Step n={5} title="Restart Claude desktop">
-          <p>
-            Quit Claude desktop completely (Cmd+Q on macOS, not just close
-            window), then reopen. New conversations will have the{" "}
-            <code>alchemy-hyperliquid</code> MCP server available with all nine
-            tools.
-          </p>
-          <p>
-            You can verify by typing <em>&ldquo;What tools do you have for
-            Hyperliquid?&rdquo;</em> &mdash; Claude should enumerate them.
-          </p>
-        </Step>
-
-        <Step n={6} title="Try it">
-          <p>Ask Claude something like:</p>
+        <Step n={5} title="Start trading">
+          <p>Open a new conversation in Claude and try:</p>
           <CodeBlock label="example prompts">
             {`"What's the current BTC price on Hyperliquid?"
 
 "Show me my Hyperliquid balance."
 
-"Buy $10 of BTC on Hyperliquid."
+"Buy $10 of BTC."
 
 "List my open orders and cancel any ETH orders."`}
           </CodeBlock>
-          <p>
-            Claude calls the relevant tool, the connector talks to our backend,
-            the backend signs (via the trading key in your config) and forwards
-            to Hyperliquid. Real fills, real builder fees credited back to
-            Alchemy&apos;s wallet.
-          </p>
         </Step>
 
         <div className="callout soon" style={{ marginTop: 40 }}>
-          <strong>Coming next:</strong> hosted MCP server with{" "}
-          <code>approveAgent</code> auth, so you don&apos;t have to manage a
-          private key in Claude&apos;s config &mdash; users sign one
-          authorization at <Link href="/approve">/approve</Link> and the
-          connector trades on their behalf within their approved constraints.
+          <strong>Power-user alternative (stdio mode):</strong> if you&apos;d
+          rather run the MCP server locally with a hot private key (single-user,
+          no hosted dependency), see <code>packages/mcp-server/README.md</code>
+          {" "}in the repo. More setup but no shared infra.
         </div>
 
         <div className="callout" style={{ marginTop: 16 }}>
-          <strong>Troubleshooting:</strong> if Claude desktop doesn&apos;t see
-          the connector after editing the config, check that the path in{" "}
-          <code>args</code> is absolute (not <code>~/</code>), the file is valid
-          JSON, and you fully quit Claude desktop. Logs at{" "}
-          <code>~/Library/Logs/Claude/</code>. The full README lives at{" "}
-          <code>packages/mcp-server/README.md</code> in the repo.
+          <strong>Troubleshooting:</strong> if Claude can&apos;t reach the
+          connector after &ldquo;Add,&rdquo; the URL might not be deployed yet
+          &mdash; this page documents the target setup. If your trades return{" "}
+          <code>NEEDS_DEPOSIT</code>, the wallet hasn&apos;t deposited USDC
+          into HL yet; visit <Link href="/approve">/approve</Link>.
         </div>
       </main>
       <Footer />

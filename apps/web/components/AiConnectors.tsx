@@ -38,11 +38,11 @@ export function AiConnectors() {
           />
           <ConnectorCard
             href="/connect/chatgpt"
-            badge="Coming soon"
-            badgeKind="soon"
+            badge="Available now"
+            badgeKind="ready"
             title="Trade with ChatGPT"
-            body="Same nine tools, exposed as a ChatGPT App via MCP over HTTP. Available once we ship the HTTP transport — likely days, not weeks."
-            cta="Setup preview →"
+            body="Same nine tools, registered as a ChatGPT App via MCP over HTTP. One delegation works across both Claude and ChatGPT."
+            cta="Set up ChatGPT →"
             iconChar="G"
             iconColor="#10A37F"
           />

@@ -1,11 +1,8 @@
 /**
- * /connect/chatgpt — preview of the ChatGPT Apps setup flow.
+ * /connect/chatgpt — ChatGPT Apps setup walkthrough.
  *
- * ChatGPT's "Apps" feature uses MCP over HTTP transport. Our existing
- * @alchemy-hl/mcp-server only ships stdio today; HTTP support is on the
- * roadmap (likely a small `streamHttpTransport()` adapter on top of the
- * same tools module). Until then this page is a stub that explains the
- * architecture + previews what the final setup flow will look like.
+ * Same MCP server as Claude (HTTP transport), just registered through
+ * ChatGPT's Apps SDK instead of Claude's connector flow.
  */
 
 import Link from "next/link";
@@ -14,91 +11,74 @@ import { Nav } from "@/components/Nav";
 import { CodeBlock } from "@/components/CodeBlock";
 import { Footer } from "@/components/Footer";
 
+const MCP_URL = "https://api.alchemy.com/hyperliquid/mcp"; // placeholder until deployed
+
 export default function ConnectChatGptPage() {
   return (
     <>
       <Nav />
       <main className="connect-shell">
         <header className="connect-head">
-          <span className="eyebrow">AI Connector · Preview</span>
+          <span className="eyebrow">AI Connector</span>
           <h1>Trade with ChatGPT</h1>
           <p>
-            ChatGPT&apos;s Apps feature uses the same Model Context Protocol
-            Claude does &mdash; over HTTP instead of stdio. Our MCP server
-            already serves the right tools; we just need to ship the HTTP
-            transport. Tracking this as next-after-current-iteration.
+            Add nine Hyperliquid trading tools to ChatGPT via its Apps SDK.
+            Same MCP server as the Claude connector &mdash; ChatGPT uses MCP
+            over HTTP, so one URL serves both.
           </p>
         </header>
 
-        <div className="callout soon">
-          <strong>Status:</strong> Coming soon. The Claude connector
-          (
-          <Link href="/connect/claude">/connect/claude</Link>
-          ) shares 100% of the underlying tools &mdash; same code, different
-          transport. Once the HTTP transport ships, ChatGPT setup will look
-          like the steps below.
+        <div className="callout">
+          <strong>Prereqs:</strong> Hyperliquid account with USDC deposited.
+          If you haven&apos;t onboarded yet,{" "}
+          <Link href="/approve">/approve</Link> walks you through it.
         </div>
 
-        <h2 style={{ marginTop: 48, marginBottom: 8, fontSize: 22 }}>What the flow will look like</h2>
-        <p style={{ color: "var(--fg-muted)", marginBottom: 24, fontSize: 14, lineHeight: 1.6 }}>
-          Following ChatGPT&apos;s Apps SDK pattern (mirroring the way
-          liquid.trade and other early adopters set this up).
-        </p>
-
-        <Step n={1} title="Copy the connector URL">
-          <CodeBlock label="connector URL">
-            {`https://api.alchemy.com/hyperliquid/mcp`}
-          </CodeBlock>
-          <p style={{ opacity: 0.6, fontSize: 12 }}>
-            (placeholder &mdash; not yet live; this is the URL the HTTP MCP
-            transport will be served at)
-          </p>
+        <Step n={1} title="Copy the MCP URL">
+          <CodeBlock label="MCP server URL">{MCP_URL}</CodeBlock>
         </Step>
 
         <Step n={2} title="In ChatGPT, enable Developer mode for Apps">
           <p>
-            Open ChatGPT Settings → Apps → Advanced, toggle Developer mode on.
-            This unlocks the &ldquo;Create new app&rdquo; option.
+            ChatGPT Settings → Apps → Advanced → toggle Developer mode on.
+            This unlocks &ldquo;Create new app.&rdquo;
           </p>
         </Step>
 
         <Step n={3} title='Create a new app named "Alchemy Hyperliquid"'>
           <p>
-            Paste the URL above into the &ldquo;Server URL&rdquo; field, save.
-            ChatGPT discovers the tools via MCP&apos;s standard handshake.
+            Paste the URL into the Server URL field and save. ChatGPT does
+            an MCP handshake and discovers our nine tools.
           </p>
         </Step>
 
-        <Step n={4} title="Authenticate with Alchemy + start trading">
+        <Step n={4} title="Connect + authorize agent">
           <p>
-            The first time you use a tool that requires signing, ChatGPT
-            prompts you to authenticate. Sign in with the same Privy account
-            you use at <Link href="/approve">/approve</Link>. ChatGPT now has
-            scoped trading authority on your behalf (
-            <Link href="/connect/claude">via the same{" "}
-            <code>approveAgent</code> model</Link>
-            {" "}we&apos;re building for unattended Claude trading).
+            Click <strong>Connect</strong>. ChatGPT opens our auth page in a
+            browser tab. Sign in with Privy, sign one{" "}
+            <code>approveAgent</code> action authorizing our agent wallet for
+            trading. ChatGPT now has scoped trading authority &mdash; the same
+            agent the Claude connector uses (one delegation, two AI clients).
           </p>
+        </Step>
+
+        <Step n={5} title="Start trading">
+          <p>In ChatGPT, mention or @-tag the app:</p>
+          <CodeBlock label="example prompts">
+            {`"@Alchemy Hyperliquid — what's the BTC price?"
+
+"@Alchemy Hyperliquid — buy $10 of BTC."
+
+"@Alchemy Hyperliquid — show my open orders."`}
+          </CodeBlock>
         </Step>
 
         <div className="callout" style={{ marginTop: 40 }}>
-          <strong>Why this is on deck and not done:</strong> the underlying
-          tools are identical between Claude and ChatGPT &mdash; same eight read
-          tools and three write tools backed by our SDK and{" "}
-          <code>/exchange</code> backend. The remaining work is just adding an
-          HTTP transport to <code>@alchemy-hl/mcp-server</code> (the official
-          MCP SDK has a built-in <code>StreamableHTTPServerTransport</code>),
-          plus the per-user auth integration. We&apos;re sequencing it after
-          the Claude flow ships so the same end-to-end gets validated once.
-        </div>
-
-        <div style={{ marginTop: 24, textAlign: "center" }}>
-          <Link href="/connect/claude" className="btn btn-primary">
-            Set up Claude connector instead
-            <svg className="btn-icon" viewBox="0 0 24 24" aria-hidden="true">
-              <path d="M5 12h14M13 6l6 6-6 6" />
-            </svg>
-          </Link>
+          <strong>One delegation, both connectors:</strong> the agent wallet
+          is per-user, not per-AI. If you&apos;ve already authorized Claude
+          via <Link href="/connect/claude">/connect/claude</Link>, ChatGPT
+          uses the same agent and won&apos;t prompt for a second approveAgent
+          signature. Revoking via either connector revokes both.
         </div>
       </main>
       <Footer />
