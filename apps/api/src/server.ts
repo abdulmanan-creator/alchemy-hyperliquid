@@ -99,13 +99,12 @@ app.setErrorHandler((err, req, reply) => {
 
 app.get("/healthz", async () => ({ ok: true, builder: config.ALCHEMY_BUILDER_ADDRESS }));
 
-// TODO(privy-jwt): when we start gating non-public endpoints behind a Privy
-// session, add a preHandler hook here that:
-//   1. reads the Authorization: Bearer <token> header
-//   2. verifies the JWT against process.env.PRIVY_APP_SECRET using Privy's
-//      verifyAuthToken from @privy-io/server-auth
-//   3. attaches the verified user id to req for downstream handlers
-// Until then PRIVY_APP_SECRET is plumbed through env but unused.
+// Privy JWT verification is wired per-route inside the agent-signing path
+// (apps/api/src/routes/agent.ts → POST /agent/exchange). The verifier lives
+// in apps/api/src/helpers/privyAuth.ts and reads PRIVY_APP_ID +
+// PRIVY_APP_SECRET from config. Other routes remain public and stateless.
+// If we add more authenticated surfaces, prefer the same per-route pattern
+// over a global preHandler so unauth'd endpoints stay fast.
 
 await registerRoutes(app);
 

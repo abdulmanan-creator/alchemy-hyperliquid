@@ -39,6 +39,14 @@ const ConfigSchema = z.object({
     .string()
     .regex(/^0x[0-9a-fA-F]{64}$/, "must be 0x + 64 hex chars (32 bytes)")
     .optional(),
+  /**
+   * Privy app credentials, server-side. Both required to verify the JWT a
+   * client sends in `Authorization: Bearer <token>` for /agent/exchange.
+   * Without these, the agent-signing path is disabled. APP_ID is the same
+   * public string as NEXT_PUBLIC_PRIVY_APP_ID; APP_SECRET is secret.
+   */
+  PRIVY_APP_ID: z.string().optional(),
+  PRIVY_APP_SECRET: z.string().optional(),
 });
 
 export type Config = Omit<
