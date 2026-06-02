@@ -317,6 +317,49 @@ describe("signature recovery", () => {
   });
 });
 
+describe("zero-builder guard", () => {
+  it("refuses to build approveBuilderFee when ALCHEMY_BUILDER_ADDRESS is 0x0", async () => {
+    const zeroEnv = {
+      ...baseEnv,
+      ALCHEMY_BUILDER_ADDRESS: "0x0000000000000000000000000000000000000000",
+    } as NodeJS.ProcessEnv;
+    const app = await buildApp(zeroEnv);
+    try {
+      const res = await app.inject({
+        method: "POST",
+        url: "/exchange",
+        payload: { action: { type: "approveBuilderFee", maxFeeRate: "1%" } },
+      });
+      expect(res.statusCode).toBe(422);
+      const body = res.json();
+      expect(body.error).toBe("INVALID_PARAMS");
+      expect(body.message).toMatch(/zero address/i);
+      expect(body.guidance).toMatch(/restart/i);
+    } finally {
+      await app.close();
+    }
+  });
+
+  it("refuses to build an order when ALCHEMY_BUILDER_ADDRESS is 0x0", async () => {
+    const zeroEnv = {
+      ...baseEnv,
+      ALCHEMY_BUILDER_ADDRESS: "0x0000000000000000000000000000000000000000",
+    } as NodeJS.ProcessEnv;
+    const app = await buildApp(zeroEnv);
+    try {
+      const res = await app.inject({
+        method: "POST",
+        url: "/exchange",
+        payload: { action: makeOrder(0) },
+      });
+      expect(res.statusCode).toBe(422);
+      expect(res.json().error).toBe("INVALID_PARAMS");
+    } finally {
+      await app.close();
+    }
+  });
+});
+
 describe("HL error mapping", () => {
   let app: FastifyInstance;
   beforeEach(async () => {

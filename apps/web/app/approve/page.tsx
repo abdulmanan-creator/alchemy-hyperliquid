@@ -27,7 +27,22 @@ import {
   useFundWallet,
   type ConnectedWallet,
 } from "@privy-io/react-auth";
-import { useSignTypedData } from "wagmi";
+import { useSetActiveWallet } from "@privy-io/wagmi";
+import {
+  useReadContract,
+  useSignTypedData,
+  useWaitForTransactionReceipt,
+  useWriteContract,
+} from "wagmi";
+import { erc20Abi, parseUnits } from "viem";
+
+// Hyperliquid's deposit contract (Bridge2) on Arbitrum mainnet. Verified at
+// https://hyperliquid.gitbook.io/hyperliquid-docs/for-developers/api/bridge2
+// On testnet HL uses a different bridge; if/when we wire testnet end-to-end,
+// derive this from a server endpoint instead of hardcoding.
+const HL_BRIDGE_ARBITRUM = "0x2Df1c51E09aECF9cacB7bc98cB1742757f163dF7" as const;
+// Native Circle USDC on Arbitrum (the variant HL accepts).
+const USDC_ARBITRUM = "0xaf88d065e77c8cC2239327C5EDb3A432268e5831" as const;
 
 import type {
   ApprovalState,
@@ -47,12 +62,83 @@ interface ErrState {
 export default function ApprovePage() {
   const { ready, authenticated, login, logout, user } = usePrivy();
   const { wallets } = useWallets();
+  const { setActiveWallet } = useSetActiveWallet();
   const { signTypedDataAsync } = useSignTypedData();
   const { fundWallet } = useFundWallet();
 
-  const activeWallet = useMemo<ConnectedWallet | undefined>(() => wallets[0], [wallets]);
+  // If the user signed in via email/Google we have an embedded wallet; prefer
+  // that as the signer (matches the email-first product story). Otherwise fall
+  // back to whatever external wallet is first in Privy's list.
+  const activeWallet = useMemo<ConnectedWallet | undefined>(() => {
+    const embedded = wallets.find((w) => w.walletClientType === "privy");
+    return embedded ?? wallets[0];
+  }, [wallets]);
   const isEmbedded = activeWallet?.walletClientType === "privy";
   const userAddress = activeWallet?.address as `0x${string}` | undefined;
+
+  // Sync wagmi's active account to whatever wallet Privy has selected. Without
+  // this, useSignTypedData (wagmi) can sign with a still-connected external
+  // wallet (e.g. MetaMask from an earlier session) even though useWallets()
+  // says the embedded wallet is the user's primary. Producing a mismatch
+  // between the address shown in the chip and the address that actually signs.
+  useEffect(() => {
+    if (activeWallet) {
+      void setActiveWallet(activeWallet);
+    }
+  }, [activeWallet, setActiveWallet]);
+
+  // ---- HL deposit (in-app) ------------------------------------------------
+  // Privy embedded wallets can't connect to app.hyperliquid.xyz from outside
+  // our app, so we drive the deposit transaction (USDC.transfer → HL Bridge2
+  // on Arbitrum) from inside /approve via wagmi. After confirmation, HL's
+  // indexer credits the wallet's HL account in 1-3s; the user clicks Retry.
+  const { writeContractAsync, data: depositTxHash, reset: resetDeposit } = useWriteContract();
+  const {
+    isLoading: depositConfirming,
+    isSuccess: depositConfirmed,
+  } = useWaitForTransactionReceipt({ hash: depositTxHash });
+
+  // Live USDC balance of the embedded wallet on Arbitrum — used to render
+  // "you have N USDC available to deposit" and validate the amount before
+  // submitting.
+  const { data: usdcBalanceRaw } = useReadContract({
+    abi: erc20Abi,
+    address: USDC_ARBITRUM,
+    functionName: "balanceOf",
+    args: activeWallet?.address ? [activeWallet.address as `0x${string}`] : undefined,
+    query: { enabled: !!activeWallet?.address, refetchInterval: 5_000 },
+  });
+
+  const usdcBalance = usdcBalanceRaw ? Number(usdcBalanceRaw) / 1e6 : 0;
+  const [depositAmount, setDepositAmount] = useState("5");
+  const [depositPhase, setDepositPhase] = useState<"idle" | "submitting" | "confirming" | "done" | "error">("idle");
+  const [depositError, setDepositError] = useState<string | null>(null);
+
+  const submitDeposit = useCallback(async () => {
+    if (!activeWallet?.address) return;
+    setDepositError(null);
+    try {
+      const amount = parseUnits(depositAmount, 6);
+      if (amount === 0n) throw new Error("Deposit amount must be > 0");
+      setDepositPhase("submitting");
+      await writeContractAsync({
+        abi: erc20Abi,
+        address: USDC_ARBITRUM,
+        functionName: "transfer",
+        args: [HL_BRIDGE_ARBITRUM, amount],
+      });
+      setDepositPhase("confirming");
+    } catch (err) {
+      setDepositError((err as Error).message ?? "Deposit transaction failed.");
+      setDepositPhase("error");
+    }
+  }, [activeWallet?.address, depositAmount, writeContractAsync]);
+
+  useEffect(() => {
+    if (depositConfirmed) {
+      setDepositPhase("done");
+    }
+  }, [depositConfirmed]);
 
   const [approval, setApproval] = useState<ApprovalState | null>(null);
   const [approvalLoading, setApprovalLoading] = useState(false);
@@ -197,6 +283,19 @@ export default function ApprovePage() {
               onDisconnect={logout}
               onRetry={() => runApproval(`${feeRate}%`)}
               onFundWallet={() => userAddress && fundWallet(userAddress)}
+              usdcBalance={usdcBalance}
+              depositAmount={depositAmount}
+              setDepositAmount={setDepositAmount}
+              depositPhase={depositPhase}
+              depositTxHash={depositTxHash}
+              depositConfirming={depositConfirming}
+              depositError={depositError}
+              onDeposit={submitDeposit}
+              onResetDeposit={() => {
+                resetDeposit();
+                setDepositPhase("idle");
+                setDepositError(null);
+              }}
             />
           )}
         </div>
@@ -527,13 +626,26 @@ function DepositCard(props: {
   onDisconnect: () => void;
   onRetry: () => void;
   onFundWallet: () => void;
+  usdcBalance: number;
+  depositAmount: string;
+  setDepositAmount: (s: string) => void;
+  depositPhase: "idle" | "submitting" | "confirming" | "done" | "error";
+  depositTxHash: `0x${string}` | undefined;
+  depositConfirming: boolean;
+  depositError: string | null;
+  onDeposit: () => void;
+  onResetDeposit: () => void;
 }) {
-  // Pull the deposit URL out of the guidance string the API returned. The
-  // server already chose mainnet vs testnet based on HYPERLIQUID_API_URL, so
-  // we just surface it verbatim instead of redoing the env check client-side.
+  // Server's guidance string carries the right HL deposit URL (mainnet vs
+  // testnet). On testnet the deposit-via-bridge flow is different (faucet),
+  // so we fall back to the external link there.
   const urlMatch = props.error.guidance.match(/https:\/\/[^\s)]+/);
-  const depositUrl = urlMatch?.[0];
-  const isTestnet = depositUrl?.includes("testnet") ?? false;
+  const externalUrl = urlMatch?.[0];
+  const isTestnet = externalUrl?.includes("testnet") ?? false;
+
+  const amountNum = Number(props.depositAmount);
+  const amountOk = amountNum > 0 && amountNum <= props.usdcBalance;
+  const inFlight = props.depositPhase === "submitting" || props.depositPhase === "confirming";
 
   return (
     <CardShell>
@@ -542,37 +654,156 @@ function DepositCard(props: {
       <h1 className="approve-title">One step first: deposit USDC.</h1>
       <p className="approve-sub">
         Even gas-free actions like <code>approveBuilderFee</code> need a non-empty
-        Hyperliquid account. Drop a small amount of USDC into{" "}
-        {isTestnet ? "the testnet faucet" : "your Hyperliquid balance"}, then come
-        back here and click Retry.
+        Hyperliquid account. {isTestnet
+          ? "Claim testnet USDC at the link below, then come back and click Retry."
+          : "Deposit USDC from this wallet into Hyperliquid, then click Retry."}
       </p>
 
-      {depositUrl && (
-        <a
-          href={depositUrl}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="btn btn-primary btn-block"
-          style={{ marginBottom: 14 }}
-        >
-          {isTestnet ? "Open Hyperliquid testnet faucet" : "Open Hyperliquid deposit"}
-          <svg className="btn-icon" viewBox="0 0 24 24" aria-hidden="true">
-            <path d="M5 12h14M13 6l6 6-6 6" />
-          </svg>
-        </a>
+      {/* Testnet path: external faucet link. Mainnet path: in-app deposit. */}
+      {isTestnet ? (
+        externalUrl && (
+          <a
+            href={externalUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="btn btn-primary btn-block"
+            style={{ marginBottom: 14 }}
+          >
+            Open Hyperliquid testnet faucet
+            <svg className="btn-icon" viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M5 12h14M13 6l6 6-6 6" />
+            </svg>
+          </a>
+        )
+      ) : (
+        <>
+          <div className="field-group">
+            <div className="field-label">
+              <span className="lbl">Amount to deposit</span>
+              <span className="hint">Wallet balance: {props.usdcBalance.toFixed(2)} USDC</span>
+            </div>
+            <div className="fee-input">
+              <input
+                type="text"
+                inputMode="decimal"
+                value={props.depositAmount}
+                onChange={(e) => props.setDepositAmount(e.target.value)}
+                disabled={inFlight || props.depositPhase === "done"}
+              />
+              <span className="suffix">USDC</span>
+            </div>
+            <div className="fee-meta">
+              Sends to Hyperliquid Bridge2 on Arbitrum.{" "}
+              <a
+                href={`https://arbiscan.io/address/${HL_BRIDGE_ARBITRUM}`}
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                Verify contract ↗
+              </a>
+            </div>
+          </div>
+
+          {(props.depositPhase === "idle" || props.depositPhase === "error") && (
+            <button
+              className={`btn btn-primary btn-block${amountOk ? "" : " btn-disabled"}`}
+              onClick={props.onDeposit}
+              disabled={!amountOk}
+            >
+              Deposit {props.depositAmount} USDC into Hyperliquid
+              <svg className="btn-icon" viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M5 12h14M13 6l6 6-6 6" />
+              </svg>
+            </button>
+          )}
+
+          {props.depositPhase === "submitting" && (
+            <div className="pending-row" style={{ marginBottom: 14 }}>
+              <span className="spinner"></span>
+              <div className="txt">
+                <div className="ttl">Confirm in your wallet…</div>
+                <div className="sub">Approve the USDC transfer to HL Bridge2.</div>
+              </div>
+            </div>
+          )}
+
+          {props.depositPhase === "confirming" && (
+            <div className="pending-row" style={{ marginBottom: 14 }}>
+              <span className="spinner"></span>
+              <div className="txt">
+                <div className="ttl">Waiting for Arbitrum confirmation…</div>
+                <div className="sub">
+                  {props.depositTxHash && (
+                    <a
+                      href={`https://arbiscan.io/tx/${props.depositTxHash}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                    >
+                      View on Arbiscan ↗
+                    </a>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {props.depositPhase === "done" && (
+            <>
+              <div className="approved-badge" style={{ marginBottom: 14 }}>
+                <span className="check">
+                  <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12l5 5L20 7" /></svg>
+                </span>
+                <div>
+                  <div className="ttl">Deposit confirmed</div>
+                  <div className="meta">
+                    {props.depositTxHash && (
+                      <a
+                        href={`https://arbiscan.io/tx/${props.depositTxHash}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                      >
+                        View tx ↗
+                      </a>
+                    )}
+                  </div>
+                </div>
+              </div>
+              <p style={{ fontSize: 12, color: "var(--fg-dim)", marginBottom: 14 }}>
+                HL&apos;s indexer credits the account within ~3 seconds. Click Retry.
+              </p>
+            </>
+          )}
+
+          {props.depositPhase === "error" && props.depositError && (
+            <div className="error-banner">
+              <span className="ic">!</span>
+              <div>
+                <div className="ttl">Deposit failed</div>
+                <div>{props.depositError}</div>
+              </div>
+            </div>
+          )}
+        </>
       )}
 
-      {props.isEmbedded && !isTestnet && (
+      {props.isEmbedded && !isTestnet && props.usdcBalance < amountNum && (
         <button
           className="btn btn-secondary btn-secondary-block"
           onClick={props.onFundWallet}
-          style={{ marginBottom: 14 }}
+          style={{ marginBottom: 14, marginTop: 14 }}
         >
-          Buy USDC on Arbitrum (then bridge into Hyperliquid)
+          Buy more USDC on Arbitrum
         </button>
       )}
 
-      <button className="btn btn-secondary btn-secondary-block" onClick={props.onRetry}>
+      <button
+        className="btn btn-secondary btn-secondary-block"
+        onClick={() => {
+          if (props.depositPhase === "error") props.onResetDeposit();
+          props.onRetry();
+        }}
+        style={{ marginTop: 14 }}
+      >
         Retry approval
       </button>
 

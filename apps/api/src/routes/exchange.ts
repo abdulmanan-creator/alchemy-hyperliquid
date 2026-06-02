@@ -100,11 +100,33 @@ export async function exchangeRoute(app: FastifyInstance): Promise<void> {
   });
 }
 
+/**
+ * Refuse to build sign-able payloads when the configured builder is the zero
+ * address — almost always means ALCHEMY_BUILDER_ADDRESS wasn't set in .env
+ * before the API was started. Without this guard the user could approve the
+ * zero address as their builder (harmless but wasted), or place orders that
+ * inject builder=0x0 (fees burn). Better to fail loudly here.
+ *
+ * cancel / cancelByCloid don't reference the builder address so they pass.
+ */
+const ZERO_ADDR = /^0x0+$/i;
+
 function buildPhase(
   action: Action,
   nonce: number,
   cfg: import("../config.js").Config,
 ): BuildResponse {
+  if (
+    (action.type === "order" || action.type === "approveBuilderFee") &&
+    ZERO_ADDR.test(cfg.ALCHEMY_BUILDER_ADDRESS)
+  ) {
+    throw new ApiException(
+      "INVALID_PARAMS",
+      "Server's ALCHEMY_BUILDER_ADDRESS is the zero address.",
+      "Set ALCHEMY_BUILDER_ADDRESS in .env to a real wallet, then fully restart the API (dotenv only reads .env at boot). Until then this endpoint refuses to build payloads that would commit to the zero address.",
+    );
+  }
+
   if (action.type === "order") {
     injectBuilder(action, cfg);
     const { hash, typedData } = phantomAgentTypedData(action, nonce, {
