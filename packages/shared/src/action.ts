@@ -73,12 +73,40 @@ export interface ApproveBuilderFeeAction {
   signatureChainId?: `0x${string}`;
 }
 
+/**
+ * User-signed `approveAgent` action (EIP-712).
+ *
+ * Delegates trading authority on the user's HL account to a separate "agent
+ * wallet" identified by `agentAddress`. After this is approved, the agent key
+ * can sign trades that HL credits to the approving user — no withdrawal
+ * permission, only trading. Used to enable unattended AI trading: user signs
+ * this once via Privy, server signs subsequent trades using the per-user
+ * agent key derived from AGENT_MASTER_SEED.
+ *
+ * Set `agentAddress` to all-zeros to revoke an existing agent (matches HL's
+ * convention for revocation through the same action).
+ */
+export interface ApproveAgentAction {
+  type: "approveAgent";
+  /** "Mainnet" or "Testnet". */
+  hyperliquidChain?: "Mainnet" | "Testnet";
+  /** Agent wallet being approved. Server fills if absent, using AGENT_MASTER_SEED derivation. */
+  agentAddress?: `0x${string}`;
+  /** Optional friendly name HL stores alongside the approval. Server fills "Alchemy" if absent. */
+  agentName?: string;
+  /** Nonce. Server fills with Date.now() if absent. */
+  nonce?: number;
+  /** Signature chain id, hex string. Arbitrum mainnet = "0xa4b1". */
+  signatureChainId?: `0x${string}`;
+}
+
 /** Union of every action the backend understands. */
 export type Action =
   | OrderAction
   | CancelAction
   | CancelByCloidAction
-  | ApproveBuilderFeeAction;
+  | ApproveBuilderFeeAction
+  | ApproveAgentAction;
 
 /** Compact ECDSA signature shape. */
 export interface Signature {

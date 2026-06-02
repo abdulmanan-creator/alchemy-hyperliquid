@@ -26,6 +26,19 @@ const ConfigSchema = z.object({
     .enum(["trace", "debug", "info", "warn", "error", "fatal"])
     .default("info"),
   NODE_ENV: z.enum(["development", "production", "test"]).default("development"),
+  /**
+   * 32-byte hex master seed used to deterministically derive per-user agent
+   * keys for HL approveAgent / unattended trading (Layer 2). Optional — if
+   * unset, /exchange will refuse to build approveAgent actions and the
+   * /agent/* endpoints return INVALID_PARAMS. Generate with:
+   *   openssl rand -hex 32
+   * Keep this secret. Anyone with this seed can derive every user's agent
+   * key (which can trade their HL account but not withdraw).
+   */
+  AGENT_MASTER_SEED: z
+    .string()
+    .regex(/^0x[0-9a-fA-F]{64}$/, "must be 0x + 64 hex chars (32 bytes)")
+    .optional(),
 });
 
 export type Config = Omit<

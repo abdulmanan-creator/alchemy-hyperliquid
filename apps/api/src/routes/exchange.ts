@@ -12,7 +12,11 @@ import { ApiException } from "../errors.js";
 import { ExchangeBodySchema, type ExchangeBody } from "../schemas.js";
 import { injectBuilder, orderHasSpot, feeBpsFor } from "../helpers/builder.js";
 import { phantomAgentTypedData } from "../helpers/hash.js";
-import { buildApproveBuilderFeeTypedData } from "../helpers/eip712.js";
+import {
+  buildApproveAgentTypedData,
+  buildApproveBuilderFeeTypedData,
+} from "../helpers/eip712.js";
+import { deriveAgentAddress, AGENT_NAME } from "../helpers/agent.js";
 import { recoverActionSigner } from "../helpers/verify.js";
 import { HlClient } from "../helpers/hlClient.js";
 
@@ -113,7 +117,7 @@ export async function exchangeRoute(app: FastifyInstance): Promise<void> {
 
     // ---- Phase A: build ------------------------------------------------------
     const nonce = body.nonce ?? Date.now();
-    const out = buildPhase(body.action, nonce, app.config);
+    const out = buildPhase(body.action, nonce, app.config, body.user);
     req.log.info(
       { type: body.action.type, nonce, hash: out.hash, builderFee: out.builderFee },
       "exchange_build",
@@ -137,6 +141,7 @@ function buildPhase(
   action: Action,
   nonce: number,
   cfg: import("../config.js").Config,
+  user?: `0x${string}`,
 ): BuildResponse {
   if (
     (action.type === "order" || action.type === "approveBuilderFee") &&
@@ -176,6 +181,50 @@ function buildPhase(
     // client signs the typed data directly and gets the digest from their
     // wallet's signing flow. We return the EIP-712 digest as a courtesy
     // (the same value the wallet computes internally).
+    return {
+      hash: hashTypedDataDigest(typedData),
+      nonce: usedNonce,
+      action: filled,
+      isSpot: false,
+      builderFee: 0,
+      builder: cfg.ALCHEMY_BUILDER_ADDRESS,
+      typedData,
+    };
+  }
+
+  if (action.type === "approveAgent") {
+    if (!cfg.AGENT_MASTER_SEED) {
+      throw new ApiException(
+        "INVALID_PARAMS",
+        "Server's AGENT_MASTER_SEED is not configured.",
+        "Set AGENT_MASTER_SEED in .env to enable approveAgent + unattended trading. Generate with: openssl rand -hex 32",
+      );
+    }
+    // Caller may explicitly pass agentAddress (e.g. all-zeros to revoke);
+    // otherwise we derive the user's canonical agent address. Derivation
+    // requires knowing the user's address — that's the `user` field on the
+    // ExchangeBody.
+    let agentAddress = action.agentAddress;
+    if (!agentAddress) {
+      if (!user) {
+        throw new ApiException(
+          "INVALID_PARAMS",
+          "approveAgent build needs the user address.",
+          "Pass `user: 0x...` in the request body so we can derive their agent wallet from AGENT_MASTER_SEED. Alternatively pass an explicit `action.agentAddress`.",
+        );
+      }
+      agentAddress = deriveAgentAddress(
+        cfg.AGENT_MASTER_SEED as `0x${string}`,
+        user,
+      );
+    }
+    const { typedData, action: filled, nonce: usedNonce } =
+      buildApproveAgentTypedData(action, {
+        agentAddress,
+        agentName: action.agentName ?? AGENT_NAME,
+        isTestnet: cfg.isTestnet,
+        nonce,
+      });
     return {
       hash: hashTypedDataDigest(typedData),
       nonce: usedNonce,

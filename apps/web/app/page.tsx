@@ -1,6 +1,7 @@
 import { Nav } from "@/components/Nav";
 import { Hero } from "@/components/Hero";
 import { Features } from "@/components/Features";
+import { AiConnectors } from "@/components/AiConnectors";
 import { RestApi } from "@/components/RestApi";
 import { Fees } from "@/components/Fees";
 import { Faq } from "@/components/Faq";
@@ -13,6 +14,7 @@ export default function HomePage() {
       <a id="top"></a>
       <Hero />
       <Features />
+      <AiConnectors />
       <RestApi />
       <Fees />
       <Faq />

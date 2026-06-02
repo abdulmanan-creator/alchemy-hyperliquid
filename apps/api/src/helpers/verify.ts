@@ -19,7 +19,11 @@ import type { Action, Signature } from "@alchemy-hl/shared";
 import type { Config } from "../config.js";
 import { ApiException } from "../errors.js";
 import { phantomAgentTypedData } from "./hash.js";
-import { buildApproveBuilderFeeTypedData } from "./eip712.js";
+import {
+  buildApproveAgentTypedData,
+  buildApproveBuilderFeeTypedData,
+} from "./eip712.js";
+import { AGENT_NAME } from "./agent.js";
 
 function packSig(sig: Signature): Hex {
   const r = sig.r.replace(/^0x/, "").padStart(64, "0");
@@ -40,6 +44,25 @@ export async function recoverActionSigner(
   if (action.type === "approveBuilderFee") {
     typedData = buildApproveBuilderFeeTypedData(action, {
       builder: cfg.ALCHEMY_BUILDER_ADDRESS,
+      isTestnet: cfg.isTestnet,
+      nonce,
+    }).typedData;
+  } else if (action.type === "approveAgent") {
+    // For verification we need the agentAddress that was in the typed data
+    // when the user signed. The action object the client re-sends carries it
+    // (filled by build phase), so just re-derive the envelope around the
+    // values present on the action. If the action somehow has no
+    // agentAddress, we can't recover; surface as SIGNATURE_INVALID.
+    if (!action.agentAddress) {
+      throw new ApiException(
+        "SIGNATURE_INVALID",
+        "approveAgent send phase is missing agentAddress.",
+        "Send phase must include the same action object returned by build phase, with agentAddress populated.",
+      );
+    }
+    typedData = buildApproveAgentTypedData(action, {
+      agentAddress: action.agentAddress,
+      agentName: action.agentName ?? AGENT_NAME,
       isTestnet: cfg.isTestnet,
       nonce,
     }).typedData;

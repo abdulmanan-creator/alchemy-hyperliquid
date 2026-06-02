@@ -14,6 +14,7 @@ export function Nav() {
         </Link>
         <div className="nav-links">
           <a className="nav-link" href="#quickstart">Docs</a>
+          <a className="nav-link" href="#ai">AI</a>
           <a className="nav-link active" href="#api">API</a>
           <a className="nav-link nav-link-discord" href="#" aria-label="Discord">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">

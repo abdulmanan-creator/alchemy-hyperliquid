@@ -91,11 +91,28 @@ export const ApproveBuilderFeeActionSchema = z.object({
     .optional(),
 });
 
+export const ApproveAgentActionSchema = z.object({
+  type: z.literal("approveAgent"),
+  hyperliquidChain: z.enum(["Mainnet", "Testnet"]).optional(),
+  // Caller normally omits — server derives from AGENT_MASTER_SEED + signer.
+  // Allow passing it explicitly to support revocation (zero address) or
+  // user-provided agents (advanced).
+  agentAddress: AddressSchema.optional(),
+  agentName: z.string().max(64).optional(),
+  nonce: z.number().int().min(0).optional(),
+  signatureChainId: z
+    .string()
+    .regex(/^0x[0-9a-fA-F]+$/)
+    .transform((s) => s as `0x${string}`)
+    .optional(),
+});
+
 export const ActionSchema = z.discriminatedUnion("type", [
   OrderActionSchema,
   CancelActionSchema,
   CancelByCloidActionSchema,
   ApproveBuilderFeeActionSchema,
+  ApproveAgentActionSchema,
 ]);
 
 // ---- Top-level /exchange body ----------------------------------------------
@@ -105,11 +122,17 @@ export const ActionSchema = z.discriminatedUnion("type", [
  *
  * We discriminate inside the route rather than via discriminatedUnion — the
  * key is the *presence* of `signature`, not a tagged literal.
+ *
+ * `user` is optional in general but required for approveAgent build, since we
+ * need to derive the user's agent address from AGENT_MASTER_SEED before they
+ * can sign. For other action types (order, cancel, approveBuilderFee) user is
+ * recovered from the signature in Phase B and `user` is ignored.
  */
 export const ExchangeBodySchema = z.object({
   action: ActionSchema,
   nonce: z.number().int().min(0).optional(),
   signature: SignatureSchema.optional(),
+  user: AddressSchema.optional(),
 });
 
 export type ExchangeBody = z.infer<typeof ExchangeBodySchema>;
