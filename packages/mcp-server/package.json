@@ -1,0 +1,29 @@
+{
+  "name": "@alchemy-hl/mcp-server",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "./dist/index.js",
+  "bin": {
+    "alchemy-hl-mcp": "./dist/index.js"
+  },
+  "files": ["dist"],
+  "scripts": {
+    "build": "tsc -b",
+    "dev": "tsx watch src/index.ts",
+    "start": "node dist/index.js",
+    "clean": "rm -rf dist *.tsbuildinfo"
+  },
+  "dependencies": {
+    "@alchemy-hl/sdk": "*",
+    "@modelcontextprotocol/sdk": "^1.0.0",
+    "dotenv": "^16.4.5",
+    "zod": "^3.23.8",
+    "zod-to-json-schema": "^3.23.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.14.10",
+    "tsx": "^4.19.0",
+    "typescript": "^5.4.5"
+  }
+}
