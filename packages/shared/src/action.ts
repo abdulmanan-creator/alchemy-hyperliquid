@@ -54,6 +54,26 @@ export interface CancelByCloidAction {
 }
 
 /**
+ * L1 `updateLeverage` action — sets the leverage multiplier for a (user,
+ * asset) pair. Persists across trades until changed again. Higher leverage =
+ * less margin required per dollar of notional.
+ *
+ * The server enforces a MAX_AGENT_LEVERAGE_PERPS cap on the agent-signed path
+ * (so an AI client can't crank leverage above what ops considers safe).
+ * Users can still set leverage above the cap via /exchange with their primary
+ * wallet signature; only the agent path is bounded.
+ */
+export interface UpdateLeverageAction {
+  type: "updateLeverage";
+  /** Asset index (perp). */
+  asset: number;
+  /** true = cross-margin (recommended for most users); false = isolated. */
+  isCross: boolean;
+  /** Integer leverage multiplier, e.g. 5 = 5x. */
+  leverage: number;
+}
+
+/**
  * User-signed `approveBuilderFee` action (EIP-712).
  *
  * The frontend submits this without a signature first to get the typed-data
@@ -105,6 +125,7 @@ export type Action =
   | OrderAction
   | CancelAction
   | CancelByCloidAction
+  | UpdateLeverageAction
   | ApproveBuilderFeeAction
   | ApproveAgentAction;
 

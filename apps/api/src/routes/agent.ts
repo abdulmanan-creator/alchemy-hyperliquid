@@ -129,6 +129,18 @@ export async function agentRoute(app: FastifyInstance): Promise<void> {
       );
     }
 
+    // 3b. Cap leverage on the agent path. Users wanting higher leverage can
+    //     still set it via /exchange with their primary wallet.
+    if (action.type === "updateLeverage") {
+      if (action.leverage > app.config.MAX_AGENT_LEVERAGE_PERPS) {
+        throw new ApiException(
+          "INVALID_PARAMS",
+          `Leverage ${action.leverage}x exceeds the agent-path cap of ${app.config.MAX_AGENT_LEVERAGE_PERPS}x.`,
+          `To set higher leverage, sign the updateLeverage action with your primary wallet via /exchange. Otherwise lower the requested leverage to ${app.config.MAX_AGENT_LEVERAGE_PERPS}x or less.`,
+        );
+      }
+    }
+
     // 4. Builder injection for order actions (same as the regular /exchange path).
     if (action.type === "order") {
       injectBuilder(action, app.config);

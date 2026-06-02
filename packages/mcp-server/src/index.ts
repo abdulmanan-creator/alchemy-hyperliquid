@@ -161,11 +161,11 @@ if (cfg.MCP_TRANSPORT === "stdio") {
     }
   });
 
-  httpServer.listen(cfg.MCP_PORT, () => {
+  httpServer.listen(cfg.httpPort, () => {
     log.info("listening", {
       transport: "http",
-      port: cfg.MCP_PORT,
-      url: `http://localhost:${cfg.MCP_PORT}`,
+      port: cfg.httpPort,
+      url: `http://localhost:${cfg.httpPort}`,
     });
   });
 }

@@ -58,6 +58,7 @@ import {
   buildCancel,
   buildLimitOrder,
   buildMarketOrder,
+  buildUpdateLeverage,
   type LimitOrderParams,
   type MarketOrderParams,
 } from "./actions.js";
@@ -258,6 +259,32 @@ export class Alchemy {
   /** Revoke by re-approving with "0%". */
   async revokeBuilder(): Promise<SendResponse> {
     return this.approveBuilder({ maxFeeRate: "0%" });
+  }
+
+  /**
+   * Set the leverage multiplier for an asset on the user's HL account.
+   * Persists across trades until changed. Higher leverage = less margin per
+   * dollar of notional.
+   *
+   * Agent mode is allowed but the backend enforces MAX_AGENT_LEVERAGE_PERPS.
+   * For higher leverage, use a user-key signer.
+   *
+   * @example
+   *   sdk.setLeverage("BTC", 5)             // 5x cross-margin on BTC
+   *   sdk.setLeverage("ETH", 3, "isolated") // 3x isolated margin on ETH
+   */
+  async setLeverage(
+    symbol: string,
+    leverage: number,
+    mode: "cross" | "isolated" = "cross",
+  ): Promise<SendResponse> {
+    const asset = await this.assets.resolve(symbol);
+    const action = buildUpdateLeverage({
+      assetIndex: asset.assetIndex,
+      leverage,
+      isCross: mode === "cross",
+    });
+    return this.signAndSend(action);
   }
 
   // ==========================================================================

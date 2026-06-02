@@ -39,10 +39,20 @@ services:
           property: hostport
       - key: LOG_LEVEL
         value: info
-      # TODO(privy-jwt): wire Privy session verification in apps/api before
-      # gating non-public endpoints. Until then this secret is set but unused.
+      # Privy verification for /agent/exchange. Both PRIVY_APP_ID (public)
+      # and PRIVY_APP_SECRET (secret) required; absence disables agent path.
+      - key: PRIVY_APP_ID
+        sync: false
       - key: PRIVY_APP_SECRET
         sync: false
+      # Master seed for deterministic per-user agent key derivation.
+      # Generate once: openssl rand -hex 32. Treat as secret.
+      - key: AGENT_MASTER_SEED
+        sync: false
+      # Hard server-side cap on leverage via the agent path. Users can set
+      # higher via /exchange with their primary wallet signature.
+      - key: MAX_AGENT_LEVERAGE_PERPS
+        value: 10
 
   # ---- Web ------------------------------------------------------------------
   - type: web
@@ -66,3 +76,36 @@ services:
         sync: false
       - key: NEXT_PUBLIC_PRIVY_APP_ID
         sync: false
+
+  # ---- MCP server (HTTP transport, for Claude Web + ChatGPT Apps) -----------
+  # Phase 1 (Track A): ALCHEMY_HL_TRADE_KEY in env → hot-key signing, single
+  #   user, no OAuth. Useful for: internal testing, ops-controlled demos.
+  # Phase 2 (Track B): remove ALCHEMY_HL_TRADE_KEY, add OAuth broker on the
+  #   API side, per-request Authorization header → multi-tenant. No changes to
+  #   this service spec for the upgrade — same image, different env.
+  - type: web
+    name: alchemy-hl-mcp
+    runtime: node
+    plan: starter
+    region: oregon
+    rootDir: .
+    buildCommand: npm ci && npm run build -w @alchemy-hl/shared && npm run build -w @alchemy-hl/sdk && npm run build -w @alchemy-hl/mcp-server
+    startCommand: npm run start -w @alchemy-hl/mcp-server
+    autoDeploy: true
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: MCP_TRANSPORT
+        value: http
+      # PORT is injected by Render and the mcp-server picks it up automatically.
+      # Same backend as the API service — wired automatically.
+      - key: ALCHEMY_HL_API_URL
+        fromService:
+          name: alchemy-hl-api
+          type: web
+          property: hostport
+      # Phase 1 hot key. Remove for Phase 2 (multi-tenant OAuth).
+      - key: ALCHEMY_HL_TRADE_KEY
+        sync: false
+      - key: LOG_LEVEL
+        value: info

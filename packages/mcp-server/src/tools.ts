@@ -359,6 +359,53 @@ export function buildTools(cfg: Config): Tool[] {
     },
 
     {
+      name: "set_leverage",
+      description:
+        "Set the leverage multiplier for an asset on the trading wallet's Hyperliquid account. Higher leverage means less margin required per dollar of notional but proportionally larger PnL swings. Persists across trades until changed. Default mode is 'cross' (recommended); 'isolated' margins the position separately. The server enforces a hard cap on the agent-authed path — exceeding it returns INVALID_PARAMS with the cap value. When suggesting leverage to the user, mention the risk: 10x leverage means a 10% price move against the position liquidates it.",
+      inputSchema: z.object({
+        symbol: z.string().describe("Asset symbol like 'BTC' or 'ETH'."),
+        leverage: z
+          .number()
+          .int()
+          .min(1)
+          .max(50)
+          .describe("Integer leverage multiplier (1 to 50)."),
+        mode: z
+          .enum(["cross", "isolated"])
+          .default("cross")
+          .describe("Margin mode. 'cross' shares margin across positions; 'isolated' margins per-position."),
+      }),
+      async handler(rawArgs, auth) {
+        const lock = requireSigner("set_leverage", auth);
+        if (lock) return lock;
+        const args = z
+          .object({
+            symbol: z.string(),
+            leverage: z.number().int().min(1).max(50),
+            mode: z.enum(["cross", "isolated"]).default("cross"),
+          })
+          .parse(rawArgs);
+        const sdk = sdkForWrite(auth)!;
+        try {
+          const result = await sdk.setLeverage(args.symbol, args.leverage, args.mode);
+          return JSON.stringify(
+            {
+              ok: result.success,
+              symbol: args.symbol,
+              leverage: args.leverage,
+              mode: args.mode,
+              user: result.user,
+            },
+            null,
+            2,
+          );
+        } catch (err) {
+          return errToMessage(err);
+        }
+      },
+    },
+
+    {
       name: "approve_builder",
       description:
         "Sign the one-time `approveBuilderFee` action authorizing Alchemy as a builder for the trading wallet. After this lands, all subsequent orders this wallet places auto-include the builder fee within the approved ceiling. `maxFeeRate` is a percent string like '1%' or '0.04%'. Call once during setup, before placing trades. Pass `maxFeeRate: '0%'` to revoke.",

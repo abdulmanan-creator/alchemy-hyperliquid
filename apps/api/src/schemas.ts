@@ -78,6 +78,16 @@ export const CancelByCloidActionSchema = z.object({
     .min(1),
 });
 
+export const UpdateLeverageActionSchema = z.object({
+  type: z.literal("updateLeverage"),
+  asset: z.number().int().min(0),
+  isCross: z.boolean(),
+  // 1x to 50x — HL's protocol max varies per asset but 50 is the ceiling.
+  // We don't enforce per-asset caps here; HL rejects if you exceed the asset's
+  // limit. Cap on the agent path is applied separately in /agent/exchange.
+  leverage: z.number().int().min(1).max(50),
+});
+
 export const ApproveBuilderFeeActionSchema = z.object({
   type: z.literal("approveBuilderFee"),
   hyperliquidChain: z.enum(["Mainnet", "Testnet"]).optional(),
@@ -111,6 +121,7 @@ export const ActionSchema = z.discriminatedUnion("type", [
   OrderActionSchema,
   CancelActionSchema,
   CancelByCloidActionSchema,
+  UpdateLeverageActionSchema,
   ApproveBuilderFeeActionSchema,
   ApproveAgentActionSchema,
 ]);

@@ -47,6 +47,13 @@ const ConfigSchema = z.object({
    */
   PRIVY_APP_ID: z.string().optional(),
   PRIVY_APP_SECRET: z.string().optional(),
+  /**
+   * Hard server-side cap on leverage when the agent path signs an
+   * updateLeverage action. Users can still set higher leverage via /exchange
+   * with their primary wallet signature. Default 10 — conservative for AI
+   * agents acting unattended. Raise if your traders need more headroom.
+   */
+  MAX_AGENT_LEVERAGE_PERPS: z.coerce.number().int().min(1).max(50).default(10),
 });
 
 export type Config = Omit<

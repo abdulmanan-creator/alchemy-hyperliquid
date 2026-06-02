@@ -115,6 +115,22 @@ export function buildCancel(items: { assetIndex: number; oid: number }[]): Cance
   };
 }
 
+export function buildUpdateLeverage(opts: {
+  assetIndex: number;
+  leverage: number;
+  isCross?: boolean;
+}): import("@alchemy-hl/shared").UpdateLeverageAction {
+  if (!Number.isInteger(opts.leverage) || opts.leverage < 1) {
+    throw new SdkInputError("leverage must be a positive integer.");
+  }
+  return {
+    type: "updateLeverage",
+    asset: opts.assetIndex,
+    isCross: opts.isCross ?? true,
+    leverage: opts.leverage,
+  };
+}
+
 export function buildApproveBuilderFee(maxFeeRate: string): ApproveBuilderFeeAction {
   if (!/^\d+(\.\d+)?%$/.test(maxFeeRate)) {
     throw new SdkInputError(

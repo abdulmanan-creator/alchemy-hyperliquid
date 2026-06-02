@@ -28,6 +28,9 @@ import { z } from "zod";
 const ConfigSchema = z.object({
   ALCHEMY_HL_API_URL: z.string().url().default("http://localhost:8080"),
   MCP_TRANSPORT: z.enum(["stdio", "http"]).default("stdio"),
+  // HTTP listen port. Render / Fly / Heroku inject PORT; MCP_PORT is the
+  // explicit local-dev override. PORT wins when both are set.
+  PORT: z.coerce.number().int().min(1).max(65535).optional(),
   MCP_PORT: z.coerce.number().int().min(1).max(65535).default(3001),
   ALCHEMY_HL_TRADE_KEY: z
     .string()
@@ -36,13 +39,22 @@ const ConfigSchema = z.object({
   LOG_LEVEL: z.enum(["debug", "info", "warn", "error"]).default("info"),
 });
 
-export type Config = z.infer<typeof ConfigSchema> & {
+export type Config = Omit<z.infer<typeof ConfigSchema>, "PORT" | "MCP_PORT"> & {
   hasSigner: boolean;
+  /** Effective HTTP port: PORT (host-injected) wins, falls back to MCP_PORT. */
+  httpPort: number;
 };
 
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
   const parsed = ConfigSchema.parse(env);
-  return { ...parsed, hasSigner: !!parsed.ALCHEMY_HL_TRADE_KEY };
+  return {
+    ALCHEMY_HL_API_URL: parsed.ALCHEMY_HL_API_URL,
+    MCP_TRANSPORT: parsed.MCP_TRANSPORT,
+    ALCHEMY_HL_TRADE_KEY: parsed.ALCHEMY_HL_TRADE_KEY,
+    LOG_LEVEL: parsed.LOG_LEVEL,
+    hasSigner: !!parsed.ALCHEMY_HL_TRADE_KEY,
+    httpPort: parsed.PORT ?? parsed.MCP_PORT,
+  };
 }
 
 const LEVELS: Record<Config["LOG_LEVEL"], number> = {

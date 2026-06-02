@@ -236,7 +236,11 @@ function buildPhase(
     };
   }
 
-  if (action.type === "cancel" || action.type === "cancelByCloid") {
+  if (
+    action.type === "cancel" ||
+    action.type === "cancelByCloid" ||
+    action.type === "updateLeverage"
+  ) {
     const { hash, typedData } = phantomAgentTypedData(action, nonce, {
       isTestnet: cfg.isTestnet,
     });
@@ -256,7 +260,7 @@ function buildPhase(
   throw new ApiException(
     "INVALID_PARAMS",
     `Unsupported action type.`,
-    "Use one of: order, cancel, cancelByCloid, approveBuilderFee.",
+    "Use one of: order, cancel, cancelByCloid, updateLeverage, approveBuilderFee, approveAgent.",
   );
 }
 
