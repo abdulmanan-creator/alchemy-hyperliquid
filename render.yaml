@@ -36,7 +36,7 @@ services:
         fromService:
           name: alchemy-hl-web
           type: web
-          property: hostport
+          property: host
       - key: LOG_LEVEL
         value: info
       # Privy verification for /agent/exchange. Both PRIVY_APP_ID (public)
@@ -75,7 +75,7 @@ services:
         fromService:
           name: alchemy-hl-api
           type: web
-          property: hostport
+          property: host
       # Public MCP URL — shown on /connect/claude + /connect/chatgpt so the
       # user can paste it into the connector dialog. Auto-resolved from the
       # mcp service's hostname (bare hostname; normalized client-side to add
@@ -84,7 +84,7 @@ services:
         fromService:
           name: alchemy-hl-mcp
           type: web
-          property: hostport
+          property: host
       - key: NEXT_PUBLIC_BUILDER_ADDR
         sync: false
       - key: NEXT_PUBLIC_PRIVY_APP_ID
@@ -121,7 +121,7 @@ services:
         fromService:
           name: alchemy-hl-api
           type: web
-          property: hostport
+          property: host
       # Phase 1 hot key (optional, used as fallback when no Authorization
       # header is present). Path B (OAuth) is now active alongside it.
       - key: ALCHEMY_HL_TRADE_KEY
@@ -134,11 +134,11 @@ services:
         fromService:
           name: alchemy-hl-mcp
           type: web
-          property: hostport
+          property: host
       - key: WEB_PUBLIC_URL
         fromService:
           name: alchemy-hl-web
           type: web
-          property: hostport
+          property: host
       - key: LOG_LEVEL
         value: info
