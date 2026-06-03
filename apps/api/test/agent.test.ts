@@ -14,7 +14,7 @@
  */
 
 import Fastify, { type FastifyInstance } from "fastify";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { loadConfig } from "../src/config.js";
 import { ApiException, sendError } from "../src/errors.js";
@@ -78,8 +78,15 @@ describe("GET /agent", () => {
   let app: FastifyInstance;
   beforeEach(async () => {
     app = await buildApp([agentRoute]);
+    // The route calls HL's /info { type: "extraAgents" } to learn whether
+    // the user has already approved our derived agent. Mock that so tests
+    // stay hermetic and don't hit real HL testnet.
+    vi.spyOn(globalThis, "fetch").mockImplementation(async () =>
+      new Response(JSON.stringify([]), { status: 200 }),
+    );
   });
   afterEach(async () => {
+    vi.restoreAllMocks();
     await app.close();
   });
 
@@ -90,9 +97,27 @@ describe("GET /agent", () => {
     expect(body.user).toBe(USER_A);
     expect(body.agentAddress).toMatch(/^0x[0-9a-fA-F]{40}$/);
     expect(body.agentName).toBe("Alchemy");
+    expect(body.approved).toBe(false); // empty extraAgents list
     // Same call again returns the same agent address (deterministic).
     const res2 = await app.inject({ method: "GET", url: `/agent?user=${USER_A}` });
     expect(res2.json().agentAddress).toBe(body.agentAddress);
+  });
+
+  it("flags approved=true when HL's extraAgents includes our derived agent", async () => {
+    const expectedAgent = deriveAgentAddress(SEED, USER_A);
+    vi.restoreAllMocks();
+    vi.spyOn(globalThis, "fetch").mockImplementation(async () =>
+      new Response(
+        JSON.stringify([
+          { address: expectedAgent, name: "Alchemy", validUntil: 9999999999 },
+        ]),
+        { status: 200 },
+      ),
+    );
+    const res = await app.inject({ method: "GET", url: `/agent?user=${USER_A}` });
+    const body = res.json();
+    expect(body.approved).toBe(true);
+    expect(body.validUntil).toBe(9999999999);
   });
 
   it("rejects malformed user", async () => {

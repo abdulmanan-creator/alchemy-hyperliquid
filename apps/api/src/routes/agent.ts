@@ -74,10 +74,36 @@ export async function agentRoute(app: FastifyInstance): Promise<void> {
       q.user,
     );
 
+    // Check HL's extraAgents registry for this user. If our derived agent is
+    // already listed, the /oauth/authorize page can skip the approveAgent
+    // step — HL rejects re-approving the same agent address with "Extra
+    // agent already used" (which is what happens when a user OAuth's
+    // through both Claude + ChatGPT against the same wallet).
+    let approved = false;
+    let validUntil: number | null = null;
+    try {
+      const agents = (await hl.info<HlExtraAgent[]>({
+        type: "extraAgents",
+        user: q.user,
+      })) ?? [];
+      const lower = agentAddress.toLowerCase();
+      const hit = agents.find((a) => a.address?.toLowerCase() === lower);
+      if (hit) {
+        approved = true;
+        validUntil = typeof hit.validUntil === "number" ? hit.validUntil : null;
+      }
+    } catch (err) {
+      // Don't fail the lookup if HL is unreachable — caller can still
+      // attempt approveAgent and surface any error from there.
+      req.log.warn({ err: (err as Error).message }, "extra_agents_lookup_failed");
+    }
+
     return reply.send({
       user: q.user,
       agentAddress,
       agentName: AGENT_NAME,
+      approved,
+      validUntil,
     });
   });
 
@@ -191,6 +217,17 @@ export async function agentRoute(app: FastifyInstance): Promise<void> {
     };
     return reply.send(out);
   });
+}
+
+/**
+ * Shape of an entry in HL's `/info { type: "extraAgents" }` response.
+ * Fields beyond what we read are intentionally not typed — HL adds new
+ * ones occasionally and we don't want strict typing to break the call.
+ */
+interface HlExtraAgent {
+  address: string;
+  name?: string;
+  validUntil?: number;
 }
 
 /**

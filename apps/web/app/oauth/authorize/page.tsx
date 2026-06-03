@@ -225,7 +225,22 @@ function AuthorizeFlow() {
           return;
         }
         setAgentAddress(agent.agentAddress);
-        setStep(approval?.approved ? "need-agent" : "need-builder");
+
+        // Step transitions, in order of precedence:
+        //   1. Builder fee not yet approved → need-builder
+        //   2. Agent already approved on HL (e.g. user previously OAuth'd
+        //      from Claude and is now coming through ChatGPT) → skip
+        //      approveAgent entirely and go straight to issuing the
+        //      OAuth code. Re-approving the same agent address fails on
+        //      HL with "Extra agent already used".
+        //   3. Otherwise → need-agent, prompt the signature.
+        if (!approval?.approved) {
+          setStep("need-builder");
+        } else if (agent.approved) {
+          setStep("issuing");
+        } else {
+          setStep("need-agent");
+        }
       } catch (err) {
         failWithError("server_error", `Could not load auth state: ${(err as Error).message}`);
       }
