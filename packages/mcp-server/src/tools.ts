@@ -29,6 +29,13 @@ import type { Config } from "./config.js";
 export interface AuthContext {
   /** Privy JWT, set in http mode when Authorization: Bearer ... is present. */
   agentJwt?: string;
+  /**
+   * User's wallet address, extracted from the OAuth JWT's `sub` claim by the
+   * http transport. Used by read tools (get_balance, get_open_orders,
+   * get_approval) as the default `user` arg so callers don't have to repeat
+   * their own address on every call.
+   */
+  userAddress?: `0x${string}`;
 }
 
 export interface Tool {
@@ -143,27 +150,22 @@ export function buildTools(cfg: Config): Tool[] {
           .optional()
           .describe("0x-prefixed wallet address. Optional."),
       }),
-      async handler(rawArgs) {
+      async handler(rawArgs, auth) {
         const { user } = z
           .object({ user: z.string().regex(/^0x[0-9a-fA-F]{40}$/).optional() })
           .parse(rawArgs ?? {});
-        if (user) {
-          const bal = await readSdk.balance(user as `0x${string}`);
+        const effectiveUser = (user as `0x${string}` | undefined) ?? auth.userAddress;
+        if (effectiveUser) {
+          const bal = await readSdk.balance(effectiveUser);
           return JSON.stringify(bal, null, 2);
         }
-        // No user → fall back to whatever wallet the configured signer
-        // controls. The hot-key SDK can do this; agent-mode SDK can't (its
-        // JWT identifies a user but we don't expose that here). Tell Claude
-        // to pass `user` explicitly in that case.
+        // No explicit user, no OAuth-derived user → fall back to hot signer.
         if (hotSdk) {
           const bal = await hotSdk.balance();
           return JSON.stringify(bal, null, 2);
         }
         return JSON.stringify(
-          {
-            error:
-              "Pass `user` explicitly. The default-to-signer fallback only works in stdio (hot-key) mode.",
-          },
+          { error: "Pass `user` explicitly — no auth context to default from." },
           null,
           2,
         );
@@ -173,46 +175,56 @@ export function buildTools(cfg: Config): Tool[] {
     {
       name: "get_open_orders",
       description:
-        "List a wallet's resting (open, unfilled) orders on Hyperliquid. Each order in the response includes a pre-built cancel action that can be passed to cancel_order. If `user` is omitted, defaults to the server's trading key wallet.",
+        "List a wallet's resting (open, unfilled) orders on Hyperliquid. Each order in the response includes a pre-built cancel action that can be passed to cancel_order. If `user` is omitted, defaults to the authenticated wallet (from the OAuth session) or the server's trading key.",
       inputSchema: z.object({
         user: z.string().regex(/^0x[0-9a-fA-F]{40}$/).optional(),
       }),
-      async handler(rawArgs) {
+      async handler(rawArgs, auth) {
         const { user } = z
           .object({ user: z.string().regex(/^0x[0-9a-fA-F]{40}$/).optional() })
           .parse(rawArgs ?? {});
-        if (user) {
-          const orders = await readSdk.openOrders(user as `0x${string}`);
+        const effectiveUser = (user as `0x${string}` | undefined) ?? auth.userAddress;
+        if (effectiveUser) {
+          const orders = await readSdk.openOrders(effectiveUser);
           return JSON.stringify(orders, null, 2);
         }
         if (hotSdk) {
           const orders = await hotSdk.openOrders();
           return JSON.stringify(orders, null, 2);
         }
-        return JSON.stringify({ error: "Pass `user` explicitly in http mode." }, null, 2);
+        return JSON.stringify(
+          { error: "Pass `user` explicitly — no auth context to default from." },
+          null,
+          2,
+        );
       },
     },
 
     {
       name: "get_approval",
       description:
-        "Check whether a wallet has approved Alchemy as a Hyperliquid builder, and at what max fee rate. Returns { approved, maxFeeRate, canTradePerps, canTradeSpot }. Use this before placing trades — if approved=false, the user needs to call approve_builder first.",
+        "Check whether a wallet has approved Alchemy as a Hyperliquid builder, and at what max fee rate. Returns { approved, maxFeeRate, canTradePerps, canTradeSpot }. Use this before placing trades — if approved=false, the user needs to call approve_builder first. Defaults to the authenticated wallet.",
       inputSchema: z.object({
         user: z.string().regex(/^0x[0-9a-fA-F]{40}$/).optional(),
       }),
-      async handler(rawArgs) {
+      async handler(rawArgs, auth) {
         const { user } = z
           .object({ user: z.string().regex(/^0x[0-9a-fA-F]{40}$/).optional() })
           .parse(rawArgs ?? {});
-        if (user) {
-          const approval = await readSdk.approval(user as `0x${string}`);
+        const effectiveUser = (user as `0x${string}` | undefined) ?? auth.userAddress;
+        if (effectiveUser) {
+          const approval = await readSdk.approval(effectiveUser);
           return JSON.stringify(approval, null, 2);
         }
         if (hotSdk) {
           const approval = await hotSdk.approval();
           return JSON.stringify(approval, null, 2);
         }
-        return JSON.stringify({ error: "Pass `user` explicitly in http mode." }, null, 2);
+        return JSON.stringify(
+          { error: "Pass `user` explicitly — no auth context to default from." },
+          null,
+          2,
+        );
       },
     },
 

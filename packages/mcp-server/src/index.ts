@@ -177,6 +177,13 @@ if (cfg.MCP_TRANSPORT === "stdio") {
         | undefined;
       const match = authHeader?.match(/^Bearer\s+(.+)$/i);
       const agentJwt = match?.[1];
+      // Decode (but do not verify) the JWT to extract the user's wallet
+      // address from the `sub` claim. This lets read tools default to the
+      // authenticated user without requiring the caller to pass `user`
+      // every time. Cryptographic verification happens downstream when MCP
+      // forwards the JWT to /agent/exchange, so a tampered token here can
+      // only get a stranger's *public* read data — never sign anything.
+      const userAddress = agentJwt ? decodeSubFromJwt(agentJwt) : undefined;
 
       // OAuth gate (MCP authorization spec 2025-06-18). When OAuth is
       // configured, every MCP request must carry a Bearer token. Missing
@@ -204,7 +211,7 @@ if (cfg.MCP_TRANSPORT === "stdio") {
         return;
       }
 
-      const server = makeMcpServer({ agentJwt });
+      const server = makeMcpServer({ agentJwt, userAddress });
       const transport = new StreamableHTTPServerTransport({
         // Stateless mode: each request is independent. MCP hosts that need
         // session continuity (server-streamed notifications) can be added
@@ -230,4 +237,29 @@ if (cfg.MCP_TRANSPORT === "stdio") {
       url: `http://localhost:${cfg.httpPort}`,
     });
   });
+}
+
+/**
+ * Pull the `sub` claim out of a JWT without verifying. Both our OAuth
+ * tokens and Privy JWTs put the user's wallet address in `sub`. Returns
+ * undefined if the token isn't a well-formed three-part JWS or the
+ * claim isn't a 0x-address. Crypto verification happens on the api when
+ * the token is presented to /agent/exchange — this is only used to
+ * default read tools' `user` arg to the authenticated wallet.
+ */
+function decodeSubFromJwt(jwt: string): `0x${string}` | undefined {
+  const parts = jwt.split(".");
+  if (parts.length !== 3) return undefined;
+  try {
+    const padded = parts[1]!.padEnd(parts[1]!.length + ((4 - (parts[1]!.length % 4)) % 4), "=");
+    const payload = JSON.parse(
+      Buffer.from(padded.replace(/-/g, "+").replace(/_/g, "/"), "base64").toString("utf8"),
+    ) as { sub?: string };
+    if (typeof payload.sub === "string" && /^0x[0-9a-fA-F]{40}$/.test(payload.sub)) {
+      return payload.sub as `0x${string}`;
+    }
+    return undefined;
+  } catch {
+    return undefined;
+  }
 }
