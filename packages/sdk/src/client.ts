@@ -187,7 +187,9 @@ export class Alchemy {
    *   sdk.limitOrder({ symbol: "BTC", side: "buy", size: 0.001, price: 60000, tif: "Gtc" })
    */
   async limitOrder(
-    p: Omit<LimitOrderParams, "assetIndex"> & { symbol: string },
+    p: Omit<LimitOrderParams, "assetIndex" | "szDecimals" | "isSpot"> & {
+      symbol: string;
+    },
   ): Promise<OrderResult> {
     const asset = await this.assets.resolve(p.symbol);
     const action = buildLimitOrder({
@@ -211,7 +213,7 @@ export class Alchemy {
    */
   async marketBuy(
     symbol: string,
-    opts: Omit<MarketOrderParams, "assetIndex" | "side" | "markPrice"> & {
+    opts: Omit<MarketOrderParams, "assetIndex" | "side" | "markPrice" | "szDecimals" | "isSpot"> & {
       markPrice?: MarketOrderParams["markPrice"];
     } = {},
   ): Promise<OrderResult> {
@@ -220,7 +222,7 @@ export class Alchemy {
 
   async marketSell(
     symbol: string,
-    opts: Omit<MarketOrderParams, "assetIndex" | "side" | "markPrice"> & {
+    opts: Omit<MarketOrderParams, "assetIndex" | "side" | "markPrice" | "szDecimals" | "isSpot"> & {
       markPrice?: MarketOrderParams["markPrice"];
     } = {},
   ): Promise<OrderResult> {
@@ -297,7 +299,7 @@ export class Alchemy {
   // ==========================================================================
 
   private async marketOrder(
-    p: Omit<MarketOrderParams, "assetIndex" | "markPrice"> & {
+    p: Omit<MarketOrderParams, "assetIndex" | "markPrice" | "szDecimals" | "isSpot"> & {
       symbol: string;
       markPrice?: MarketOrderParams["markPrice"];
     },
