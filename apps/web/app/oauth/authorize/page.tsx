@@ -94,7 +94,7 @@ function AuthorizeFlow() {
     | undefined;
   const scope = params.get("scope") ?? "trade";
 
-  const { ready, authenticated, login, user, getAccessToken } = usePrivy();
+  const { ready, authenticated, login, logout, user, getAccessToken } = usePrivy();
   const { wallets } = useWallets();
   const { setActiveWallet } = useSetActiveWallet();
   const { signTypedDataAsync } = useSignTypedData();
@@ -231,6 +231,18 @@ function AuthorizeFlow() {
       }
     })();
   }, [step, paramsValid, ready, authenticated, userAddress, failWithError]);
+
+  // Reset the state machine when the user signs out (e.g., via the "Switch
+  // account" button). Without this, step would stay at "need-agent" and the
+  // loading effect above would skip re-fetching on re-login with a different
+  // wallet, leaving the page showing stale state.
+  useEffect(() => {
+    if (ready && !authenticated) {
+      setStep("init");
+      setAgentAddress(null);
+      setErrorState(null);
+    }
+  }, [ready, authenticated]);
 
   // ---- Sign actions --------------------------------------------------------
 
@@ -394,15 +406,44 @@ function AuthorizeFlow() {
 
       {ready && authenticated && userAddress && (
         <div style={{ marginTop: 28 }}>
-          <div className="callout" style={{ marginBottom: 24 }}>
-            <strong>Signed in as:</strong>{" "}
-            {user?.email?.address ??
-              (user?.google as { email?: string } | undefined)?.email ??
-              shortAddr(userAddress)}{" "}
-            ·{" "}
-            <span style={{ fontFamily: "var(--font-mono)", fontSize: 12 }}>
-              {shortAddr(userAddress)}
-            </span>
+          <div
+            className="callout"
+            style={{
+              marginBottom: 24,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+              gap: 16,
+              flexWrap: "wrap",
+            }}
+          >
+            <div>
+              <strong>Signed in as:</strong>{" "}
+              {user?.email?.address ??
+                (user?.google as { email?: string } | undefined)?.email ??
+                shortAddr(userAddress)}{" "}
+              ·{" "}
+              <span style={{ fontFamily: "var(--font-mono)", fontSize: 12 }}>
+                {shortAddr(userAddress)}
+              </span>
+            </div>
+            <button
+              type="button"
+              className="btn btn-secondary"
+              style={{ fontSize: 13, padding: "6px 12px" }}
+              onClick={async () => {
+                try {
+                  await logout();
+                } catch (err) {
+                  // Logout shouldn't fail in practice; if it does, the
+                  // page state still resets because Privy clears local
+                  // session synchronously before the promise settles.
+                  console.warn("logout failed", err);
+                }
+              }}
+            >
+              Switch account
+            </button>
           </div>
 
           {step === "loading-state" && (
