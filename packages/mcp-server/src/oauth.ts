@@ -58,6 +58,22 @@ export async function handleOAuthRequest(
     });
   }
 
+  // RFC 9728 — protected resource metadata. The MCP authorization spec
+  // (rev 2025-06-18) requires this: clients that get a 401 with
+  // `WWW-Authenticate: ... resource_metadata=<url>` fetch this URL to
+  // discover which authorization server to OAuth against. Without this
+  // endpoint + the 401 challenge below, MCP hosts (Claude Web) treat the
+  // server as auth-less and never initiate the OAuth dance.
+  if (path === "/.well-known/oauth-protected-resource") {
+    if (req.method !== "GET") return badMethod(res, "GET");
+    return sendJson(res, 200, {
+      resource: cfg.MCP_PUBLIC_URL,
+      authorization_servers: [cfg.MCP_PUBLIC_URL],
+      scopes_supported: ["read", "trade"],
+      bearer_methods_supported: ["header"],
+    });
+  }
+
   // RFC 7591 — Dynamic Client Registration.
   if (path === "/oauth/register") {
     if (req.method !== "POST") return badMethod(res, "POST");

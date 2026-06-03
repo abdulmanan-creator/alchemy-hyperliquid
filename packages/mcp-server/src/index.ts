@@ -178,6 +178,32 @@ if (cfg.MCP_TRANSPORT === "stdio") {
       const match = authHeader?.match(/^Bearer\s+(.+)$/i);
       const agentJwt = match?.[1];
 
+      // OAuth gate (MCP authorization spec 2025-06-18). When OAuth is
+      // configured, every MCP request must carry a Bearer token. Missing
+      // token → 401 + WWW-Authenticate per RFC 6750 / RFC 9728. Clients
+      // (Claude Web) follow `resource_metadata` to discover the auth
+      // server, run the OAuth flow, and retry with the issued token.
+      //
+      // We don't cryptographically verify the JWT here — that happens
+      // when MCP forwards to /agent/exchange on the api. The 401 is
+      // purely to trigger the OAuth handshake; bad/expired tokens are
+      // rejected downstream with a tool error that surfaces to the user.
+      if (!agentJwt && cfg.OAUTH_SIGNING_SECRET) {
+        const resourceMeta = `${cfg.MCP_PUBLIC_URL}/.well-known/oauth-protected-resource`;
+        res.writeHead(401, {
+          "WWW-Authenticate": `Bearer realm="${cfg.MCP_PUBLIC_URL}", resource_metadata="${resourceMeta}"`,
+          "Content-Type": "application/json",
+        });
+        res.end(
+          JSON.stringify({
+            error: "unauthorized",
+            error_description: "Authentication required. See the WWW-Authenticate header for OAuth discovery.",
+          }),
+        );
+        log.info("auth_challenge_sent", { path: req.url });
+        return;
+      }
+
       const server = makeMcpServer({ agentJwt });
       const transport = new StreamableHTTPServerTransport({
         // Stateless mode: each request is independent. MCP hosts that need
