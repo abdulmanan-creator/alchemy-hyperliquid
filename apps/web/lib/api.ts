@@ -11,7 +11,12 @@
 
 import { AlchemyHyperliquid } from "@alchemy-hl/sdk-preview";
 
-function normalizeUrl(input: string): string {
+/**
+ * Normalize a URL-ish string into a full URL with scheme. Render's
+ * `fromService.property: hostport` returns a bare hostname; we prepend
+ * `https://` (or `http://` for localhost) so fetch URLs are valid.
+ */
+export function normalizeUrl(input: string): string {
   const trimmed = input.trim().replace(/\/+$/, "");
   if (/^https?:\/\//i.test(trimmed)) return trimmed;
   const isLocal = /^(localhost|127\.0\.0\.1|0\.0\.0\.0)(:\d+)?$/i.test(trimmed);

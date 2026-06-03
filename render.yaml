@@ -76,6 +76,15 @@ services:
           name: alchemy-hl-api
           type: web
           property: hostport
+      # Public MCP URL — shown on /connect/claude + /connect/chatgpt so the
+      # user can paste it into the connector dialog. Auto-resolved from the
+      # mcp service's hostname (bare hostname; normalized client-side to add
+      # https://).
+      - key: NEXT_PUBLIC_MCP_URL
+        fromService:
+          name: alchemy-hl-mcp
+          type: web
+          property: hostport
       - key: NEXT_PUBLIC_BUILDER_ADDR
         sync: false
       - key: NEXT_PUBLIC_PRIVY_APP_ID

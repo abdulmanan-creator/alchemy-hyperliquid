@@ -11,7 +11,13 @@ import { Nav } from "@/components/Nav";
 import { CodeBlock } from "@/components/CodeBlock";
 import { Footer } from "@/components/Footer";
 
-const MCP_URL = "https://api.alchemy.com/hyperliquid/mcp"; // placeholder until deployed
+import { normalizeUrl } from "@/lib/api";
+
+// Resolved at build time from NEXT_PUBLIC_MCP_URL (wired via render.yaml
+// fromService → alchemy-hl-mcp host). Falls back to a placeholder if unset.
+const MCP_URL = normalizeUrl(
+  process.env.NEXT_PUBLIC_MCP_URL ?? "https://alchemy-hl-mcp.onrender.com",
+);
 
 export default function ConnectChatGptPage() {
   return (
