@@ -32,11 +32,13 @@ services:
         value: 10
       - key: MAX_BUILDER_FEE_BPS_SPOT
         value: 100
+      # NOTE on URLs: Render's fromService.property doesn't expose the public
+      # `<name>.onrender.com` hostname. `host` returns the internal hostname
+      # (`alchemy-hl-web`); `hostport` returns the internal host:port. Since
+      # service names are fixed by this blueprint, we hard-code the public
+      # URLs here. If you fork + rename services, update these too.
       - key: WEB_ORIGIN
-        fromService:
-          name: alchemy-hl-web
-          type: web
-          property: host
+        value: https://alchemy-hl-web.onrender.com
       - key: LOG_LEVEL
         value: info
       # Privy verification for /agent/exchange. Both PRIVY_APP_ID (public)
@@ -71,20 +73,11 @@ services:
     envVars:
       - key: NODE_ENV
         value: production
+      # Public URLs — hard-coded; see WEB_ORIGIN note on the api service.
       - key: NEXT_PUBLIC_API_URL
-        fromService:
-          name: alchemy-hl-api
-          type: web
-          property: host
-      # Public MCP URL — shown on /connect/claude + /connect/chatgpt so the
-      # user can paste it into the connector dialog. Auto-resolved from the
-      # mcp service's hostname (bare hostname; normalized client-side to add
-      # https://).
+        value: https://alchemy-hl-api.onrender.com
       - key: NEXT_PUBLIC_MCP_URL
-        fromService:
-          name: alchemy-hl-mcp
-          type: web
-          property: host
+        value: https://alchemy-hl-mcp.onrender.com
       - key: NEXT_PUBLIC_BUILDER_ADDR
         sync: false
       - key: NEXT_PUBLIC_PRIVY_APP_ID
@@ -116,12 +109,10 @@ services:
       - key: MCP_TRANSPORT
         value: http
       # PORT is injected by Render and the mcp-server picks it up automatically.
-      # Same backend as the API service — wired automatically.
+      # Backend API — public URL (see WEB_ORIGIN note on the api service for
+      # why we don't use fromService here).
       - key: ALCHEMY_HL_API_URL
-        fromService:
-          name: alchemy-hl-api
-          type: web
-          property: host
+        value: https://alchemy-hl-api.onrender.com
       # Phase 1 hot key (optional, used as fallback when no Authorization
       # header is present). Path B (OAuth) is now active alongside it.
       - key: ALCHEMY_HL_TRADE_KEY
@@ -129,16 +120,11 @@ services:
       # OAuth signing secret (Path B). Shared across api + mcp + web.
       - key: OAUTH_SIGNING_SECRET
         sync: false
-      # Public URLs for OAuth metadata + redirect targets.
+      # Public URLs for OAuth metadata + redirect targets. Hard-coded; see
+      # WEB_ORIGIN note on the api service.
       - key: MCP_PUBLIC_URL
-        fromService:
-          name: alchemy-hl-mcp
-          type: web
-          property: host
+        value: https://alchemy-hl-mcp.onrender.com
       - key: WEB_PUBLIC_URL
-        fromService:
-          name: alchemy-hl-web
-          type: web
-          property: host
+        value: https://alchemy-hl-web.onrender.com
       - key: LOG_LEVEL
         value: info
