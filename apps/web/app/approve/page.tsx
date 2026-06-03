@@ -24,7 +24,6 @@ import Link from "next/link";
 import {
   usePrivy,
   useWallets,
-  useFundWallet,
   type ConnectedWallet,
 } from "@privy-io/react-auth";
 import { useSetActiveWallet } from "@privy-io/wagmi";
@@ -70,7 +69,6 @@ export default function ApprovePage() {
   const { wallets } = useWallets();
   const { setActiveWallet } = useSetActiveWallet();
   const { signTypedDataAsync } = useSignTypedData();
-  const { fundWallet } = useFundWallet();
 
   // If the user signed in via email/Google we have an embedded wallet; prefer
   // that as the signer (matches the email-first product story). Otherwise fall
@@ -259,9 +257,6 @@ export default function ApprovePage() {
                 isEmbedded={isEmbedded}
                 onRevoke={() => runApproval("0%")}
                 onDisconnect={logout}
-                onFundWallet={() =>
-                  userAddress && fundWallet(userAddress)
-                }
               />
               {TEST_TRADE_ENABLED && userAddress && (
                 <div style={{ marginTop: 16 }}>
@@ -295,7 +290,6 @@ export default function ApprovePage() {
               isEmbedded={isEmbedded}
               onDisconnect={logout}
               onRetry={() => runApproval(`${feeRate}%`)}
-              onFundWallet={() => userAddress && fundWallet(userAddress)}
               usdcBalance={usdcBalance}
               depositAmount={depositAmount}
               setDepositAmount={setDepositAmount}
@@ -456,9 +450,8 @@ function ApprovedCard(props: {
   isEmbedded: boolean;
   onRevoke: () => void;
   onDisconnect: () => void;
-  onFundWallet: () => void;
 }) {
-  const { approval, isEmbedded } = props;
+  const { approval } = props;
   return (
     <CardShell>
       <WalletChip address={props.userAddress} onDisconnect={props.onDisconnect} />
@@ -503,16 +496,16 @@ function ApprovedCard(props: {
         Revoke
       </button>
 
-      {isEmbedded && (
-        <div style={{ marginTop: 16 }}>
-          <button
-            className="btn btn-secondary btn-secondary-block"
-            onClick={props.onFundWallet}
-          >
-            Add USDC to start trading
-          </button>
-        </div>
-      )}
+      <div style={{ marginTop: 16 }}>
+        <a
+          className="btn btn-secondary btn-secondary-block"
+          href="https://app.hyperliquid.xyz/trade"
+          target="_blank"
+          rel="noopener noreferrer"
+        >
+          Deposit USDC on Hyperliquid ↗
+        </a>
+      </div>
 
       <div className="card-foot">
         <span>You can revoke any time</span>
@@ -638,7 +631,6 @@ function DepositCard(props: {
   isEmbedded: boolean;
   onDisconnect: () => void;
   onRetry: () => void;
-  onFundWallet: () => void;
   usdcBalance: number;
   depositAmount: string;
   setDepositAmount: (s: string) => void;
@@ -799,14 +791,16 @@ function DepositCard(props: {
         </>
       )}
 
-      {props.isEmbedded && !isTestnet && props.usdcBalance < amountNum && (
-        <button
+      {!isTestnet && props.usdcBalance < amountNum && (
+        <a
           className="btn btn-secondary btn-secondary-block"
-          onClick={props.onFundWallet}
+          href="https://app.uniswap.org/swap?chain=arbitrum&outputCurrency=0xaf88d065e77c8cC2239327C5EDb3A432268e5831"
+          target="_blank"
+          rel="noopener noreferrer"
           style={{ marginBottom: 14, marginTop: 14 }}
         >
-          Buy more USDC on Arbitrum
-        </button>
+          Get USDC on Arbitrum ↗
+        </a>
       )}
 
       <button
