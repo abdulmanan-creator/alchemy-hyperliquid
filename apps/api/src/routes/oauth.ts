@@ -121,17 +121,28 @@ export async function oauthRoute(app: FastifyInstance): Promise<void> {
     }
 
     if (claims.client_id !== body.client_id) {
+      req.log.warn(
+        { issued: claims.client_id, redeemed: body.client_id },
+        "oauth_code_client_id_mismatch",
+      );
       throw new ApiException(
         "NOT_APPROVED",
         "Auth code client_id mismatch.",
-        "The code was issued to a different client than the one redeeming it.",
+        `The code was issued to client_id="${claims.client_id}" but is being redeemed by "${body.client_id}".`,
       );
     }
     if (claims.redirect_uri !== body.redirect_uri) {
+      // Per RFC 6749 §3.1.2.3 redirect_uri match must be exact. Log both
+      // sides so we can spot encoding / trailing-slash diffs in real-world
+      // MCP host behavior — this is the single most common interop failure.
+      req.log.warn(
+        { issued: claims.redirect_uri, redeemed: body.redirect_uri },
+        "oauth_code_redirect_uri_mismatch",
+      );
       throw new ApiException(
         "NOT_APPROVED",
         "Auth code redirect_uri mismatch.",
-        "The code was issued for a different redirect_uri.",
+        `Issued for "${claims.redirect_uri}" but being redeemed for "${body.redirect_uri}".`,
       );
     }
 

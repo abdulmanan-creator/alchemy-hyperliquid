@@ -45,11 +45,18 @@ Unit tests live under `apps/api/test/` (vitest). They cover builder-fee injectio
 ## Deploying to Render
 
 1. Push this repo to GitHub.
-2. In Render: **New → Blueprint** → point at the repo. Render reads `render.yaml` and creates both services.
-3. In each service's **Environment** tab, fill in the `sync: false` secrets:
-   - `alchemy-hl-api`: `ALCHEMY_BUILDER_ADDRESS`
-   - `alchemy-hl-web`: `NEXT_PUBLIC_BUILDER_ADDR`, `WALLETCONNECT_PROJECT_ID`
-4. Deploy.
+2. In Render: **New → Blueprint** → point at the repo. Render reads `render.yaml` and creates three services: `alchemy-hl-api`, `alchemy-hl-web`, `alchemy-hl-mcp`.
+3. Generate two 32-byte hex secrets locally — these are shared across multiple services so generate them once and copy:
+   ```
+   openssl rand -hex 32   # → OAUTH_SIGNING_SECRET (used on api + web + mcp)
+   openssl rand -hex 32   # → AGENT_MASTER_SEED (used on api only)
+   ```
+4. In each service's **Environment** tab, fill in the `sync: false` secrets:
+   - `alchemy-hl-api`: `ALCHEMY_BUILDER_ADDRESS`, `PRIVY_APP_ID`, `PRIVY_APP_SECRET`, `AGENT_MASTER_SEED`, `OAUTH_SIGNING_SECRET`
+   - `alchemy-hl-web`: `NEXT_PUBLIC_BUILDER_ADDR`, `NEXT_PUBLIC_PRIVY_APP_ID`, `OAUTH_SIGNING_SECRET`
+   - `alchemy-hl-mcp`: `ALCHEMY_HL_TRADE_KEY` (optional fallback hot key), `OAUTH_SIGNING_SECRET`
+5. Deploy. Render hits `/healthz` to gate readiness on api + mcp. Web is gated on a successful Next.js build.
+6. Verify each service with `curl https://<service>.onrender.com/healthz` before adding the connector to Claude Web.
 
 ## Bumping the fee config without a redeploy
 
