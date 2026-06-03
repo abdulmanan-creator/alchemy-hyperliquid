@@ -11,6 +11,7 @@ describe("buildLimitOrder", () => {
   it("produces a single-leg order with defaults", () => {
     const a = buildLimitOrder({
       assetIndex: 0,
+      szDecimals: 5,
       side: "buy",
       size: 0.001,
       price: 60000,
@@ -27,6 +28,7 @@ describe("buildLimitOrder", () => {
   it("honors tif + reduce-only + cloid", () => {
     const a = buildLimitOrder({
       assetIndex: 1,
+      szDecimals: 4,
       side: "sell",
       size: 0.5,
       price: 2400,
@@ -44,9 +46,34 @@ describe("buildLimitOrder", () => {
   });
 
   it("strips trailing zeros from numeric inputs", () => {
-    const a = buildLimitOrder({ assetIndex: 0, side: "buy", size: 1.10, price: 1000 });
+    const a = buildLimitOrder({ assetIndex: 0, szDecimals: 5, side: "buy", size: 1.10, price: 1000 });
     expect(a.orders[0]?.s).toBe("1.1");
     expect(a.orders[0]?.p).toBe("1000");
+  });
+
+  it("truncates size to szDecimals (HL rejects over-precise sizes at deserialize time)", () => {
+    // HYPE has szDecimals=2; size 0.2757346605 must truncate to "0.27".
+    const a = buildLimitOrder({
+      assetIndex: 159,
+      szDecimals: 2,
+      side: "buy",
+      size: 0.2757346605,
+      price: 76,
+    });
+    expect(a.orders[0]?.s).toBe("0.27");
+  });
+
+  it("caps price decimals at (6 - szDecimals) for perps", () => {
+    // HYPE szDecimals=2 → max 4 decimals on price.
+    const a = buildLimitOrder({
+      assetIndex: 159,
+      szDecimals: 2,
+      side: "buy",
+      size: 1,
+      price: 76.160175,
+    });
+    // Cap to 4 decimals → 76.1602, sig-fig cap to 5 → "76.16".
+    expect(a.orders[0]?.p).toBe("76.16");
   });
 });
 
@@ -54,6 +81,7 @@ describe("buildMarketOrder", () => {
   it("uses size directly when given", () => {
     const a = buildMarketOrder({
       assetIndex: 0,
+      szDecimals: 5,
       side: "buy",
       size: 0.001,
       markPrice: 60000,
@@ -65,6 +93,7 @@ describe("buildMarketOrder", () => {
   it("computes size from notional + markPrice", () => {
     const a = buildMarketOrder({
       assetIndex: 0,
+      szDecimals: 5,
       side: "buy",
       notional: 100,
       markPrice: 50000,
@@ -75,6 +104,7 @@ describe("buildMarketOrder", () => {
   it("sets a buy limit above mark by at least 5%", () => {
     const a = buildMarketOrder({
       assetIndex: 0,
+      szDecimals: 5,
       side: "buy",
       size: 0.001,
       markPrice: 100,
@@ -85,6 +115,7 @@ describe("buildMarketOrder", () => {
   it("sets a sell limit below mark by at least 5%", () => {
     const a = buildMarketOrder({
       assetIndex: 0,
+      szDecimals: 5,
       side: "sell",
       size: 0.001,
       markPrice: 100,
@@ -94,13 +125,13 @@ describe("buildMarketOrder", () => {
 
   it("rejects when neither size nor notional given", () => {
     expect(() =>
-      buildMarketOrder({ assetIndex: 0, side: "buy", markPrice: 100 }),
+      buildMarketOrder({ assetIndex: 0, szDecimals: 5, side: "buy", markPrice: 100 }),
     ).toThrow(/either `size` or `notional`/);
   });
 
   it("rejects notional without markPrice", () => {
     expect(() =>
-      buildMarketOrder({ assetIndex: 0, side: "buy", notional: 100 }),
+      buildMarketOrder({ assetIndex: 0, szDecimals: 5, side: "buy", notional: 100 }),
     ).toThrow(/markPrice/);
   });
 });

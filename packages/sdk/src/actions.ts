@@ -18,6 +18,15 @@ export type Tif = "Alo" | "Gtc" | "Ioc";
 export interface LimitOrderParams {
   /** Asset index from the symbol resolver. */
   assetIndex: number;
+  /**
+   * Asset size precision (decimals). Sizes get truncated to this many
+   * decimal places; HL's /exchange serde rejects orders with more decimals.
+   * Required because passing an over-precise size silently fails with
+   * an unhelpful HTTP 422 "Failed to deserialize" error from HL.
+   */
+  szDecimals: number;
+  /** True for spot pairs (asset >= 10000). Affects price precision rules. */
+  isSpot?: boolean;
   side: "buy" | "sell";
   /** Order size in base units (e.g. 0.001 BTC). */
   size: string | number;
@@ -33,6 +42,10 @@ export interface LimitOrderParams {
 
 export interface MarketOrderParams {
   assetIndex: number;
+  /** See LimitOrderParams.szDecimals. */
+  szDecimals: number;
+  /** See LimitOrderParams.isSpot. */
+  isSpot?: boolean;
   side: "buy" | "sell";
   /** Order size in base units. Mutually exclusive with `notional`. */
   size?: string | number;
@@ -53,8 +66,8 @@ export function buildLimitOrder(p: LimitOrderParams): OrderAction {
   const leg: OrderLeg = {
     a: p.assetIndex,
     b: p.side === "buy",
-    p: toDecString(p.price),
-    s: toDecString(p.size),
+    p: roundPrice(p.price, p.szDecimals, !!p.isSpot),
+    s: roundSize(p.size, p.szDecimals),
     r: !!p.reduceOnly,
     t: { limit: { tif: p.tif ?? "Gtc" } },
   };
@@ -98,8 +111,8 @@ export function buildMarketOrder(p: MarketOrderParams): OrderAction {
   const leg: OrderLeg = {
     a: p.assetIndex,
     b: p.side === "buy",
-    p: toDecString(limit),
-    s: toDecString(size),
+    p: roundPrice(limit, p.szDecimals, !!p.isSpot),
+    s: roundSize(size, p.szDecimals),
     r: !!p.reduceOnly,
     t: { limit: { tif: "Ioc" } },
   };
@@ -151,4 +164,56 @@ function toDecString(n: string | number): string {
   // Avoid scientific notation for very small / large numbers.
   const s = n.toFixed(10);
   return s.replace(/\.?0+$/, "");
+}
+
+/**
+ * HL's /exchange serde validates that an order's price + size strings fit
+ * the asset's precision rules. Submitting a size with more decimals than
+ * `szDecimals` fails to deserialize with the unhelpful error "Failed to
+ * deserialize the JSON body into the target type" (HTTP 422). Rules:
+ *
+ *   size:  ≤ szDecimals decimal places (truncate; rounding up could exceed
+ *          the user's actual balance)
+ *   price: ≤ (MAX_DECIMALS - szDecimals) decimal places, where MAX_DECIMALS
+ *          is 6 for perps / 8 for spot. Plus the "5 significant figures"
+ *          ceiling: only the first 5 sig figs of the price are honored.
+ *
+ * Source: HL's float_to_wire / round helpers in their Python SDK. We mirror
+ * the same logic so SDK output matches what HL accepts on both /exchange
+ * and /agent/exchange paths.
+ */
+const MAX_PRICE_DECIMALS_PERPS = 6;
+const MAX_PRICE_DECIMALS_SPOT = 8;
+const MAX_PRICE_SIG_FIGS = 5;
+
+function roundSize(size: string | number, szDecimals: number): string {
+  const n = typeof size === "number" ? size : Number(size);
+  if (!Number.isFinite(n)) throw new SdkInputError(`Non-finite size: ${size}`);
+  // Truncate toward zero so we never submit a size larger than the caller's
+  // intent (and never exceed margin in the rounding direction).
+  const factor = 10 ** szDecimals;
+  const truncated = Math.trunc(n * factor) / factor;
+  return toDecString(truncated);
+}
+
+function roundPrice(price: string | number, szDecimals: number, isSpot: boolean): string {
+  const n = typeof price === "number" ? price : Number(price);
+  if (!Number.isFinite(n)) throw new SdkInputError(`Non-finite price: ${price}`);
+  if (n === 0) return "0";
+
+  const maxDecimals = isSpot ? MAX_PRICE_DECIMALS_SPOT : MAX_PRICE_DECIMALS_PERPS;
+  const decimalsAllowed = Math.max(0, maxDecimals - szDecimals);
+
+  // 1) Cap decimal places.
+  const decimalRounded = Number(n.toFixed(decimalsAllowed));
+
+  // 2) Cap significant figures. For a number like 12345.678, exp = 4 (1e4),
+  //    so to keep 5 sig figs we round to 0 decimals → "12346". For 0.000123,
+  //    exp = -4, sig-fig count to keep is 5 - (-4) - 1 = 8 decimals.
+  const exp = Math.floor(Math.log10(Math.abs(decimalRounded)));
+  const decimalsForSigFigs = Math.max(0, MAX_PRICE_SIG_FIGS - 1 - exp);
+  const finalDecimals = Math.min(decimalsAllowed, decimalsForSigFigs);
+  const rounded = Number(decimalRounded.toFixed(finalDecimals));
+
+  return toDecString(rounded);
 }

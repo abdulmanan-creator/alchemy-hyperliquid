@@ -190,7 +190,12 @@ export class Alchemy {
     p: Omit<LimitOrderParams, "assetIndex"> & { symbol: string },
   ): Promise<OrderResult> {
     const asset = await this.assets.resolve(p.symbol);
-    const action = buildLimitOrder({ ...p, assetIndex: asset.assetIndex });
+    const action = buildLimitOrder({
+      ...p,
+      assetIndex: asset.assetIndex,
+      szDecimals: asset.szDecimals,
+      isSpot: asset.isSpot,
+    });
     const sent = await this.signAndSend(action);
     return parseOrderResult(sent);
   }
@@ -304,7 +309,13 @@ export class Alchemy {
       const mp = await this.markPrice(asset.assetIndex);
       markPrice = mp.mid;
     }
-    const action = buildMarketOrder({ ...p, assetIndex: asset.assetIndex, markPrice });
+    const action = buildMarketOrder({
+      ...p,
+      assetIndex: asset.assetIndex,
+      szDecimals: asset.szDecimals,
+      isSpot: asset.isSpot,
+      markPrice,
+    });
     const sent = await this.signAndSend(action);
     return parseOrderResult(sent);
   }
