@@ -38,6 +38,7 @@ import {
 import { zodToJsonSchema } from "zod-to-json-schema";
 
 import { loadConfig, makeLogger } from "./config.js";
+import { handleOAuthRequest } from "./oauth.js";
 import { buildTools, type AuthContext } from "./tools.js";
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -134,14 +135,19 @@ if (cfg.MCP_TRANSPORT === "stdio") {
       return;
     }
 
-    // Extract Authorization: Bearer <jwt>.
-    const authHeader = (req.headers.authorization ?? req.headers.Authorization) as
-      | string
-      | undefined;
-    const match = authHeader?.match(/^Bearer\s+(.+)$/i);
-    const agentJwt = match?.[1];
-
     try {
+      // 1. OAuth routes (.well-known/oauth-authorization-server,
+      //    /oauth/register, /authorize redirect, /oauth/token).
+      const handled = await handleOAuthRequest(req, res, cfg, log);
+      if (handled) return;
+
+      // 2. MCP protocol — everything else.
+      const authHeader = (req.headers.authorization ?? req.headers.Authorization) as
+        | string
+        | undefined;
+      const match = authHeader?.match(/^Bearer\s+(.+)$/i);
+      const agentJwt = match?.[1];
+
       const server = makeMcpServer({ agentJwt });
       const transport = new StreamableHTTPServerTransport({
         // Stateless mode: each request is independent. MCP hosts that need

@@ -53,6 +53,10 @@ services:
       # higher via /exchange with their primary wallet signature.
       - key: MAX_AGENT_LEVERAGE_PERPS
         value: 10
+      # HS256 secret for the OAuth access tokens our MCP server issues to
+      # Claude Web / ChatGPT. Shared across api + mcp + web. 32 bytes hex.
+      - key: OAUTH_SIGNING_SECRET
+        sync: false
 
   # ---- Web ------------------------------------------------------------------
   - type: web
@@ -75,6 +79,10 @@ services:
       - key: NEXT_PUBLIC_BUILDER_ADDR
         sync: false
       - key: NEXT_PUBLIC_PRIVY_APP_ID
+        sync: false
+      # OAuth signing secret (server-side for /oauth/authorize → /oauth/issue-code).
+      # Must match the same value on alchemy-hl-api and alchemy-hl-mcp.
+      - key: OAUTH_SIGNING_SECRET
         sync: false
 
   # ---- MCP server (HTTP transport, for Claude Web + ChatGPT Apps) -----------
@@ -104,8 +112,23 @@ services:
           name: alchemy-hl-api
           type: web
           property: hostport
-      # Phase 1 hot key. Remove for Phase 2 (multi-tenant OAuth).
+      # Phase 1 hot key (optional, used as fallback when no Authorization
+      # header is present). Path B (OAuth) is now active alongside it.
       - key: ALCHEMY_HL_TRADE_KEY
         sync: false
+      # OAuth signing secret (Path B). Shared across api + mcp + web.
+      - key: OAUTH_SIGNING_SECRET
+        sync: false
+      # Public URLs for OAuth metadata + redirect targets.
+      - key: MCP_PUBLIC_URL
+        fromService:
+          name: alchemy-hl-mcp
+          type: web
+          property: hostport
+      - key: WEB_PUBLIC_URL
+        fromService:
+          name: alchemy-hl-web
+          type: web
+          property: hostport
       - key: LOG_LEVEL
         value: info

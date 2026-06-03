@@ -48,6 +48,17 @@ const ConfigSchema = z.object({
   PRIVY_APP_ID: z.string().optional(),
   PRIVY_APP_SECRET: z.string().optional(),
   /**
+   * HS256 signing secret for the OAuth tokens our MCP server issues to
+   * Claude Web / ChatGPT Apps. Shared between api + mcp + (web app for code
+   * issuance). 32 bytes hex. Generate via `openssl rand -hex 32`.
+   * Optional — if absent, OAuth endpoints return INVALID_PARAMS and only
+   * the Privy-JWT auth path works.
+   */
+  OAUTH_SIGNING_SECRET: z
+    .string()
+    .regex(/^[0-9a-fA-F]{32,}$/, "must be at least 16 bytes hex")
+    .optional(),
+  /**
    * Hard server-side cap on leverage when the agent path signs an
    * updateLeverage action. Users can still set higher leverage via /exchange
    * with their primary wallet signature. Default 10 — conservative for AI

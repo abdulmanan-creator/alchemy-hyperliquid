@@ -22,16 +22,19 @@ import { PrivyClient, type User } from "@privy-io/server-auth";
 
 import { ApiException } from "../errors.js";
 import type { Config } from "../config.js";
+import { verifyAccessToken } from "./oauthJwt.js";
 
 let cachedClient: PrivyClient | null = null;
 
 export interface AuthenticatedUser {
-  /** Privy user id, e.g. did:privy:cl... */
-  privyUserId: string;
+  /** Privy user id (if authed via Privy JWT). Absent for our OAuth tokens. */
+  privyUserId?: string;
   /** Wallet address we treat as the user's identity for HL trading. */
   walletAddress: `0x${string}`;
   /** Linked auth method that identifies this user, e.g. email or google. */
   loginAccount?: string;
+  /** Which token type authenticated this request. Logged for observability. */
+  tokenKind: "privy" | "oauth";
 }
 
 function getClient(cfg: Config): PrivyClient {
@@ -76,16 +79,19 @@ function walletAddressFromUser(user: User): `0x${string}` | null {
 }
 
 /**
- * Verify a `Bearer <jwt>` header and resolve it to {privyUserId, walletAddress}.
+ * Verify a `Bearer <jwt>` header and resolve it to an AuthenticatedUser.
  *
- * Throws ApiException with appropriate HTTP code on failure:
- *   - 401 (NOT_APPROVED) if no token, invalid token, expired token
- *   - 422 (INVALID_PARAMS) if server isn't configured for Privy auth
- *   - 422 if the user has no usable wallet linked
+ * Accepts two token types and tries them in order:
+ *   1. Our own OAuth access token (HS256, issued after /oauth/authorize +
+ *      /oauth/token completes). Used by Claude Web / ChatGPT Apps after the
+ *      hosted OAuth flow.
+ *   2. Privy JWT (verified via @privy-io/server-auth + getUser lookup). Used
+ *      when a client has a fresh Privy session (e.g. the web app calling
+ *      /agent/exchange directly).
  *
- * We reuse NOT_APPROVED for auth failures even though the name's awkward —
- * we don't have a generic UNAUTHORIZED code in our ErrorCode union yet.
- * Adding one is a follow-up.
+ * Why try ours first: our JWTs are HS256-verifiable in-process — sub-ms.
+ * Privy verification + getUser is a network roundtrip per request. Order
+ * doesn't matter for correctness; it just keeps the fast path fast.
  */
 export async function verifyPrivyAuth(
   authHeader: string | undefined,
@@ -95,7 +101,7 @@ export async function verifyPrivyAuth(
     throw new ApiException(
       "NOT_APPROVED",
       "Missing Authorization header.",
-      "Pass `Authorization: Bearer <privy-jwt>` to call agent-signing endpoints.",
+      "Pass `Authorization: Bearer <token>` (Privy JWT or our OAuth access token) to call agent-signing endpoints.",
     );
   }
   const m = authHeader.match(/^Bearer\s+(.+)$/i);
@@ -108,6 +114,21 @@ export async function verifyPrivyAuth(
   }
   const token = m[1]!;
 
+  // 1. Try our own OAuth access token first (in-process HS256 verify, fast).
+  if (cfg.OAUTH_SIGNING_SECRET) {
+    try {
+      const claims = await verifyAccessToken(cfg, token);
+      return {
+        walletAddress: claims.sub,
+        loginAccount: claims.email,
+        tokenKind: "oauth",
+      };
+    } catch {
+      // Not our token (or expired/tampered). Fall through to Privy attempt.
+    }
+  }
+
+  // 2. Privy JWT path.
   const client = getClient(cfg);
 
   let claims;
@@ -116,7 +137,7 @@ export async function verifyPrivyAuth(
   } catch (err) {
     throw new ApiException(
       "NOT_APPROVED",
-      `Privy JWT verification failed: ${(err as Error).message}`,
+      `Token verification failed: ${(err as Error).message}`,
       "The Authorization token isn't valid for this app or has expired. Sign in again.",
     );
   }
@@ -146,5 +167,10 @@ export async function verifyPrivyAuth(
     (user.google as { email?: string } | undefined)?.email ??
     undefined;
 
-  return { privyUserId: claims.userId, walletAddress, loginAccount };
+  return {
+    privyUserId: claims.userId,
+    walletAddress,
+    loginAccount,
+    tokenKind: "privy",
+  };
 }

@@ -37,6 +37,20 @@ const ConfigSchema = z.object({
     .regex(/^0x[0-9a-fA-F]{64}$/, "must be 0x + 64 hex chars (32 bytes)")
     .optional(),
   LOG_LEVEL: z.enum(["debug", "info", "warn", "error"]).default("info"),
+  // ---- OAuth (Path B) -----------------------------------------------------
+  // Public URL of this MCP server. Used as `issuer` in OAuth metadata + as
+  // the base for token/registration endpoint advertisements. For local dev
+  // default to http://localhost:<port>; in production set to the real URL.
+  MCP_PUBLIC_URL: z.string().url().optional(),
+  // Public URL of the web app — where users land for the /oauth/authorize UI.
+  // Default to localhost:3000 for dev.
+  WEB_PUBLIC_URL: z.string().url().default("http://localhost:3000"),
+  // HS256 secret for our OAuth JWTs. Shared with the api service. Optional;
+  // without it the OAuth endpoints return 503-style errors.
+  OAUTH_SIGNING_SECRET: z
+    .string()
+    .regex(/^[0-9a-fA-F]{32,}$/, "must be at least 16 bytes hex")
+    .optional(),
 });
 
 export type Config = Omit<z.infer<typeof ConfigSchema>, "PORT" | "MCP_PORT"> & {
@@ -47,13 +61,17 @@ export type Config = Omit<z.infer<typeof ConfigSchema>, "PORT" | "MCP_PORT"> & {
 
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
   const parsed = ConfigSchema.parse(env);
+  const httpPort = parsed.PORT ?? parsed.MCP_PORT;
   return {
     ALCHEMY_HL_API_URL: parsed.ALCHEMY_HL_API_URL,
     MCP_TRANSPORT: parsed.MCP_TRANSPORT,
     ALCHEMY_HL_TRADE_KEY: parsed.ALCHEMY_HL_TRADE_KEY,
     LOG_LEVEL: parsed.LOG_LEVEL,
     hasSigner: !!parsed.ALCHEMY_HL_TRADE_KEY,
-    httpPort: parsed.PORT ?? parsed.MCP_PORT,
+    httpPort,
+    MCP_PUBLIC_URL: parsed.MCP_PUBLIC_URL ?? `http://localhost:${httpPort}`,
+    WEB_PUBLIC_URL: parsed.WEB_PUBLIC_URL,
+    OAUTH_SIGNING_SECRET: parsed.OAUTH_SIGNING_SECRET,
   };
 }
 
