@@ -120,18 +120,48 @@ if (cfg.MCP_TRANSPORT === "stdio") {
   // Auth extracted from the request's Authorization header.
   const httpServer = createServer(async (req, res) => {
     // CORS for browser-based MCP hosts (Claude Web runs from claude.ai;
-    // ChatGPT from chatgpt.com). Permissive in dev — production should
-    // tighten to specific origins or sit behind an auth gateway.
-    res.setHeader("Access-Control-Allow-Origin", "*");
+    // ChatGPT from chatgpt.com). Echo the request's Origin instead of `*`
+    // so the response is valid when the caller uses credentials mode
+    // "include" (browsers reject "*" + credentials). Server-to-server
+    // calls (Claude's backend exchanging tokens) don't send an Origin
+    // header and don't care about CORS — those still work fine.
+    const origin = req.headers.origin;
+    if (origin) {
+      res.setHeader("Access-Control-Allow-Origin", origin);
+      res.setHeader("Vary", "Origin");
+    } else {
+      res.setHeader("Access-Control-Allow-Origin", "*");
+    }
     res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS, DELETE");
     res.setHeader(
       "Access-Control-Allow-Headers",
       "Content-Type, Authorization, MCP-Session-Id, Mcp-Session-Id",
     );
     res.setHeader("Access-Control-Expose-Headers", "Mcp-Session-Id");
+    res.setHeader("Access-Control-Allow-Credentials", "true");
     if (req.method === "OPTIONS") {
       res.writeHead(204);
       res.end();
+      return;
+    }
+
+    // Lightweight health probe. Render hits this to decide service readiness;
+    // also useful for manual smoke ("curl /healthz") before fighting OAuth.
+    // GET-only — MCP protocol uses POST on the root path so we must not
+    // shadow that.
+    if (req.method === "GET" && (req.url === "/healthz" || req.url === "/")) {
+      res.writeHead(200, { "content-type": "application/json" });
+      res.end(
+        JSON.stringify({
+          ok: true,
+          service: "alchemy-hyperliquid-mcp",
+          transport: "http",
+          hasOauth: !!cfg.OAUTH_SIGNING_SECRET,
+          hasHotSigner: cfg.hasSigner,
+          mcpPublicUrl: cfg.MCP_PUBLIC_URL,
+          webPublicUrl: cfg.WEB_PUBLIC_URL,
+        }),
+      );
       return;
     }
 

@@ -3,6 +3,7 @@
 import { useState } from "react";
 
 import { WalletRequiredModal } from "./WalletRequiredModal";
+import { API_BASE_URL } from "@/lib/api";
 
 export type FieldRow = {
   name: string;
@@ -48,7 +49,7 @@ export function Endpoint(props: EndpointProps) {
     setRunning(true);
     setResponse(null);
     try {
-      const base = (typeof window !== "undefined" && process.env.NEXT_PUBLIC_API_URL) || "http://localhost:8080";
+      const base = API_BASE_URL;
       const init: RequestInit = { method: props.run.method };
       if (props.run.method === "POST" && props.run.body) {
         init.headers = { "content-type": "application/json" };

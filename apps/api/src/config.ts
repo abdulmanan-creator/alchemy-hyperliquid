@@ -11,6 +11,33 @@ import { z } from "zod";
 
 const HEX_ADDR = /^0x[0-9a-fA-F]{40}$/;
 
+/**
+ * Normalize a URL-ish string into a full URL with scheme.
+ *
+ * Render's `fromService.property: hostport` substitution returns a bare
+ * hostname (no `https://`). We accept that and prepend the right scheme
+ * (`http://` for localhost, `https://` otherwise) so things downstream
+ * (CORS origin match, fetch URLs, etc.) work without a scheme footgun.
+ *
+ * Comma-separated origin lists (multiple allowed origins) are preserved —
+ * normalize each entry independently.
+ */
+function normalizeOrigins(input: string): string {
+  return input
+    .split(",")
+    .map((s) => s.trim())
+    .filter((s) => s.length > 0)
+    .map((s) => {
+      const noTrailing = s.replace(/\/+$/, "");
+      if (/^https?:\/\//i.test(noTrailing)) return noTrailing;
+      const isLocal = /^(localhost|127\.0\.0\.1|0\.0\.0\.0)(:\d+)?$/i.test(
+        noTrailing,
+      );
+      return `${isLocal ? "http" : "https"}://${noTrailing}`;
+    })
+    .join(",");
+}
+
 const ConfigSchema = z.object({
   ALCHEMY_BUILDER_ADDRESS: z
     .string()
@@ -103,5 +130,6 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     ALCHEMY_BUILDER_ADDRESS: checksummed,
     builderAddressLower: checksummed.toLowerCase(),
     isTestnet: parsed.HYPERLIQUID_API_URL.includes("testnet"),
+    WEB_ORIGIN: normalizeOrigins(parsed.WEB_ORIGIN),
   };
 }

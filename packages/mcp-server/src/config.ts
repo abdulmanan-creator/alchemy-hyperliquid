@@ -25,8 +25,33 @@
 
 import { z } from "zod";
 
+/**
+ * Normalize a URL-ish string into a full URL with scheme.
+ *
+ * Render's `fromService.property: hostport` substitution returns a bare
+ * hostname like `alchemy-hl-api.onrender.com` — no `https://`. Our config used
+ * to require `z.string().url()` and would fail validation on those values. So
+ * we accept bare hostnames + URLs both, and prepend `https://` when no scheme
+ * is present. Localhost / 127.0.0.1 / a literal port get `http://` instead so
+ * dev still works.
+ *
+ * Examples:
+ *   "alchemy-hl-mcp.onrender.com"      → "https://alchemy-hl-mcp.onrender.com"
+ *   "localhost:8080"                   → "http://localhost:8080"
+ *   "https://alchemy-hl-mcp.onrender.com" (no change)
+ *   "http://localhost:8080" (no change)
+ */
+export function normalizeUrl(input: string): string {
+  const trimmed = input.trim().replace(/\/+$/, "");
+  if (/^https?:\/\//i.test(trimmed)) return trimmed;
+  const isLocal = /^(localhost|127\.0\.0\.1|0\.0\.0\.0)(:\d+)?$/i.test(trimmed);
+  return `${isLocal ? "http" : "https"}://${trimmed}`;
+}
+
 const ConfigSchema = z.object({
-  ALCHEMY_HL_API_URL: z.string().url().default("http://localhost:8080"),
+  // URL-ish: bare hostname accepted (Render fromService:hostport returns
+  // bare hostnames). Normalized to full URL via normalizeUrl in loadConfig.
+  ALCHEMY_HL_API_URL: z.string().min(1).default("http://localhost:8080"),
   MCP_TRANSPORT: z.enum(["stdio", "http"]).default("stdio"),
   // HTTP listen port. Render / Fly / Heroku inject PORT; MCP_PORT is the
   // explicit local-dev override. PORT wins when both are set.
@@ -41,10 +66,11 @@ const ConfigSchema = z.object({
   // Public URL of this MCP server. Used as `issuer` in OAuth metadata + as
   // the base for token/registration endpoint advertisements. For local dev
   // default to http://localhost:<port>; in production set to the real URL.
-  MCP_PUBLIC_URL: z.string().url().optional(),
+  // URL-ish (bare hostname OK); normalized in loadConfig.
+  MCP_PUBLIC_URL: z.string().min(1).optional(),
   // Public URL of the web app — where users land for the /oauth/authorize UI.
-  // Default to localhost:3000 for dev.
-  WEB_PUBLIC_URL: z.string().url().default("http://localhost:3000"),
+  // Default to localhost:3000 for dev. URL-ish (bare hostname OK).
+  WEB_PUBLIC_URL: z.string().min(1).default("http://localhost:3000"),
   // HS256 secret for our OAuth JWTs. Shared with the api service. Optional;
   // without it the OAuth endpoints return 503-style errors.
   OAUTH_SIGNING_SECRET: z
@@ -63,14 +89,14 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
   const parsed = ConfigSchema.parse(env);
   const httpPort = parsed.PORT ?? parsed.MCP_PORT;
   return {
-    ALCHEMY_HL_API_URL: parsed.ALCHEMY_HL_API_URL,
+    ALCHEMY_HL_API_URL: normalizeUrl(parsed.ALCHEMY_HL_API_URL),
     MCP_TRANSPORT: parsed.MCP_TRANSPORT,
     ALCHEMY_HL_TRADE_KEY: parsed.ALCHEMY_HL_TRADE_KEY,
     LOG_LEVEL: parsed.LOG_LEVEL,
     hasSigner: !!parsed.ALCHEMY_HL_TRADE_KEY,
     httpPort,
-    MCP_PUBLIC_URL: parsed.MCP_PUBLIC_URL ?? `http://localhost:${httpPort}`,
-    WEB_PUBLIC_URL: parsed.WEB_PUBLIC_URL,
+    MCP_PUBLIC_URL: normalizeUrl(parsed.MCP_PUBLIC_URL ?? `http://localhost:${httpPort}`),
+    WEB_PUBLIC_URL: normalizeUrl(parsed.WEB_PUBLIC_URL),
     OAUTH_SIGNING_SECRET: parsed.OAUTH_SIGNING_SECRET,
   };
 }

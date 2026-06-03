@@ -55,7 +55,7 @@ import type {
   BuildResponse,
   SendResponse,
 } from "@alchemy-hl/sdk-preview";
-import { api, BUILDER_ADDR } from "@/lib/api";
+import { api, API_BASE_URL, BUILDER_ADDR } from "@/lib/api";
 
 type Phase = "idle" | "building" | "signing" | "sending" | "refreshing";
 
@@ -866,8 +866,7 @@ function TestTradeCard({ userAddress }: { userAddress: `0x${string}` }) {
   const [markPrice, setMarkPrice] = useState<number | null>(null);
   const fetchMarkPrice = useCallback(async () => {
     try {
-      const base = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080";
-      const res = await fetch(`${base}/markPrice?asset=${asset}`);
+      const res = await fetch(`${API_BASE_URL}/markPrice?asset=${asset}`);
       if (!res.ok) return;
       const body = (await res.json()) as { mid: string };
       const mid = Number(body.mid);

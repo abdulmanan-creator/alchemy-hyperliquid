@@ -99,6 +99,7 @@ services:
     rootDir: .
     buildCommand: npm ci && npm run build -w @alchemy-hl/shared && npm run build -w @alchemy-hl/sdk && npm run build -w @alchemy-hl/mcp-server
     startCommand: npm run start -w @alchemy-hl/mcp-server
+    healthCheckPath: /healthz
     autoDeploy: true
     envVars:
       - key: NODE_ENV
