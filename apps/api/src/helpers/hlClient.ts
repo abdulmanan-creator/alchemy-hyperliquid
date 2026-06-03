@@ -78,7 +78,13 @@ export class HlClient {
     }
 
     if (!res.ok) {
-      this.logger?.warn({ status: res.status, body: parsed, path }, "hl_rejected");
+      // On rejection log the exact request body too, so we can diff our wire
+      // format against HL's expectations. Captured on warn so this only
+      // surfaces on failure, not for every successful call.
+      this.logger?.warn(
+        { status: res.status, body: parsed, path, sentBody: body },
+        "hl_rejected",
+      );
       throw new ApiException(
         "HL_EXCHANGE_REJECTED",
         `Hyperliquid rejected the request (HTTP ${res.status}).`,
