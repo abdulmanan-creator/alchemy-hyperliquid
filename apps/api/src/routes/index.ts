@@ -9,8 +9,11 @@ import { openOrdersRoute } from "./openOrders.js";
 import { orderStatusRoute } from "./orderStatus.js";
 import { preflightRoute } from "./preflight.js";
 import { marketsRoute } from "./markets.js";
+import { marketStatsRoute } from "./marketStats.js";
 import { markPriceRoute } from "./markPrice.js";
 import { dexesRoute } from "./dexes.js";
+import { l2BookRoute } from "./l2Book.js";
+import { userFillsRoute } from "./userFills.js";
 
 export async function registerRoutes(app: FastifyInstance): Promise<void> {
   await app.register(exchangeRoute);
@@ -22,6 +25,9 @@ export async function registerRoutes(app: FastifyInstance): Promise<void> {
   await app.register(orderStatusRoute);
   await app.register(preflightRoute);
   await app.register(marketsRoute);
+  await app.register(marketStatsRoute);
   await app.register(markPriceRoute);
   await app.register(dexesRoute);
+  await app.register(l2BookRoute);
+  await app.register(userFillsRoute);
 }
