@@ -1,0 +1,39 @@
+# Alchemy Hyperliquid
+
+> Zero-custody REST API, TypeScript SDK, and AI connectors (MCP) for trading on Hyperliquid. Users sign locally or delegate to a trade-only agent key; every routed order carries Alchemy's builder code (0.04% perps / 0.05% spot, charged on top of Hyperliquid's own exchange fees).
+
+Key facts:
+- Private keys never transit Alchemy's servers. Orders are built server-side, signed client-side, and forwarded to Hyperliquid's /exchange endpoint with signature recovery as the only identity check.
+- AI assistants (Claude, ChatGPT) connect via a hosted MCP server using OAuth; a one-time approveAgent signature delegates trade-only authority (agents cannot withdraw funds — enforced by the Hyperliquid protocol).
+- Builder-fee approval is required once per wallet before trading, revocable any time by re-approving at 0%.
+
+## API
+
+- [REST API base](https://alchemy-hl-api.onrender.com): JSON over HTTPS, no API key required for reads
+- GET /markets — perps + spot asset metadata (symbol, szDecimals, max leverage, asset index)
+- GET /marketStats — mark price, 24h volume, open interest, funding per asset
+- GET /markPrice?asset={index} — current mid price
+- GET /l2Book?coin={symbol} — order-book snapshot
+- GET /balance?user={address} — account value, withdrawable, margin used
+- GET /approval?user={address} — builder-fee approval state
+- GET /userFills?user={address} — recent fills
+- POST /exchange — two-phase build → sign → send for orders, cancels, leverage, approvals
+- POST /preflight — validate an order without signing
+- POST /openOrders, POST /orderStatus — open orders (with pre-built cancel actions) and order lifecycle
+
+## AI Connectors (MCP)
+
+- [MCP server](https://alchemy-hl-mcp.onrender.com): streamable-HTTP MCP server with OAuth; 10 tools — get_markets, get_market_price, get_balance, get_open_orders, get_approval, place_market_order, place_limit_order, cancel_order, set_leverage, approve_builder
+- [Claude setup](https://alchemy-hl-web.onrender.com/connect/claude): add the MCP URL as a custom connector
+- [ChatGPT setup](https://alchemy-hl-web.onrender.com/connect/chatgpt): register the same server via ChatGPT Apps
+
+## Onboarding
+
+- [Approve & deposit](https://alchemy-hl-web.onrender.com/approve): Privy sign-in (email / Google / wallet), one approveBuilderFee signature, optional USDC deposit to Hyperliquid via the Arbitrum bridge
+- [Landing & docs](https://alchemy-hl-web.onrender.com/): API reference, fees, FAQ
+
+## Optional
+
+- [Hyperliquid app](https://app.hyperliquid.xyz): the exchange itself — positions, order history, withdrawals
+- [Alchemy Discord](https://www.alchemy.com/discord)
+- [Alchemy support](https://www.alchemy.com/support)

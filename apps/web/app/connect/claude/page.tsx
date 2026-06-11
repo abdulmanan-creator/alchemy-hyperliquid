@@ -30,7 +30,7 @@ export default function ConnectClaudePage() {
           <span className="eyebrow">AI Connector</span>
           <h1>Trade with Claude</h1>
           <p>
-            Add nine Hyperliquid trading tools to Claude. Ask in natural
+            Add ten Hyperliquid trading tools to Claude. Ask in natural
             language; Claude calls the tools, our backend signs trades using
             an agent key you authorized once.
           </p>
@@ -84,7 +84,7 @@ export default function ConnectClaudePage() {
         <Step n={3} title='Set Name to "Alchemy Hyperliquid", paste the URL'>
           <p>
             Paste the URL from step 1 into &ldquo;Remote MCP server URL&rdquo;
-            and save. Claude fetches our tool list and shows the nine
+            and save. Claude fetches our tool list and shows the ten
             available functions.
           </p>
         </Step>
@@ -130,8 +130,8 @@ export default function ConnectClaudePage() {
 
         <div className="callout" style={{ marginTop: 16 }}>
           <strong>Troubleshooting:</strong> if Claude can&apos;t reach the
-          connector after &ldquo;Add,&rdquo; the URL might not be deployed yet
-          &mdash; this page documents the target setup. If your trades return{" "}
+          connector after &ldquo;Add,&rdquo; check the server is up at{" "}
+          <code>{MCP_URL}/healthz</code>. If your trades return{" "}
           <code>NEEDS_DEPOSIT</code>, the wallet hasn&apos;t deposited USDC
           into HL yet; visit <Link href="/approve">/approve</Link>.
         </div>

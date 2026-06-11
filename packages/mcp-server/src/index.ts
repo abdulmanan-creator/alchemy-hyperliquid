@@ -28,6 +28,8 @@ import { fileURLToPath } from "node:url";
 
 import dotenv from "dotenv";
 
+import { jwtVerify } from "jose";
+
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
@@ -177,38 +179,38 @@ if (cfg.MCP_TRANSPORT === "stdio") {
         | undefined;
       const match = authHeader?.match(/^Bearer\s+(.+)$/i);
       const agentJwt = match?.[1];
-      // Decode (but do not verify) the JWT to extract the user's wallet
-      // address from the `sub` claim. This lets read tools default to the
-      // authenticated user without requiring the caller to pass `user`
-      // every time. Cryptographic verification happens downstream when MCP
-      // forwards the JWT to /agent/exchange, so a tampered token here can
-      // only get a stranger's *public* read data — never sign anything.
-      const userAddress = agentJwt ? decodeSubFromJwt(agentJwt) : undefined;
 
       // OAuth gate (MCP authorization spec 2025-06-18). When OAuth is
       // configured, every MCP request must carry a Bearer token. Missing
       // token → 401 + WWW-Authenticate per RFC 6750 / RFC 9728. Clients
       // (Claude Web) follow `resource_metadata` to discover the auth
       // server, run the OAuth flow, and retry with the issued token.
-      //
-      // We don't cryptographically verify the JWT here — that happens
-      // when MCP forwards to /agent/exchange on the api. The 401 is
-      // purely to trigger the OAuth handshake; bad/expired tokens are
-      // rejected downstream with a tool error that surfaces to the user.
       if (!agentJwt && cfg.OAUTH_SIGNING_SECRET) {
-        const resourceMeta = `${cfg.MCP_PUBLIC_URL}/.well-known/oauth-protected-resource`;
-        res.writeHead(401, {
-          "WWW-Authenticate": `Bearer realm="${cfg.MCP_PUBLIC_URL}", resource_metadata="${resourceMeta}"`,
-          "Content-Type": "application/json",
-        });
-        res.end(
-          JSON.stringify({
-            error: "unauthorized",
-            error_description: "Authentication required. See the WWW-Authenticate header for OAuth discovery.",
-          }),
-        );
+        sendAuthChallenge(res, cfg.MCP_PUBLIC_URL, "unauthorized",
+          "Authentication required. See the WWW-Authenticate header for OAuth discovery.");
         log.info("auth_challenge_sent", { path: req.url });
         return;
+      }
+
+      // Resolve the authenticated wallet address from the token's `sub`
+      // claim so read tools can default to it. With OAuth configured, every
+      // legitimate token here is one of our own HS256 access tokens, so we
+      // verify it (signature + issuer + audience + expiry) and 401 on
+      // failure — expired/tampered tokens get a fresh OAuth handshake
+      // instead of a confusing downstream tool error. Without OAuth (bare
+      // http dev mode) we fall back to decode-only; the api still verifies
+      // before anything is signed.
+      let userAddress: `0x${string}` | undefined;
+      if (agentJwt && cfg.OAUTH_SIGNING_SECRET) {
+        userAddress = await verifySubFromAccessToken(agentJwt, cfg.OAUTH_SIGNING_SECRET);
+        if (!userAddress) {
+          sendAuthChallenge(res, cfg.MCP_PUBLIC_URL, "invalid_token",
+            "Access token is expired or invalid. Re-run the OAuth flow.");
+          log.info("invalid_token_rejected", { path: req.url });
+          return;
+        }
+      } else if (agentJwt) {
+        userAddress = decodeSubFromJwt(agentJwt);
       }
 
       const server = makeMcpServer({ agentJwt, userAddress });
@@ -239,13 +241,53 @@ if (cfg.MCP_TRANSPORT === "stdio") {
   });
 }
 
+/** 401 + WWW-Authenticate per RFC 6750 / RFC 9728. `error` is the RFC 6750
+ *  error code: "unauthorized" (no token) or "invalid_token" (bad/expired). */
+function sendAuthChallenge(
+  res: import("node:http").ServerResponse,
+  mcpPublicUrl: string,
+  error: string,
+  description: string,
+): void {
+  const resourceMeta = `${mcpPublicUrl}/.well-known/oauth-protected-resource`;
+  res.writeHead(401, {
+    "WWW-Authenticate": `Bearer realm="${mcpPublicUrl}", error="${error}", resource_metadata="${resourceMeta}"`,
+    "Content-Type": "application/json",
+  });
+  res.end(JSON.stringify({ error, error_description: description }));
+}
+
+/**
+ * Verify one of our HS256 access tokens and return its `sub` wallet
+ * address, or undefined if the signature, issuer, audience, or expiry
+ * check fails. Issuer/audience values must match what the api stamps in
+ * apps/api/src/helpers/oauthJwt.ts.
+ */
+async function verifySubFromAccessToken(
+  jwt: string,
+  secret: string,
+): Promise<`0x${string}` | undefined> {
+  try {
+    const { payload } = await jwtVerify(jwt, new TextEncoder().encode(secret), {
+      issuer: "alchemy-hl-api",
+      audience: "alchemy-hl-mcp",
+    });
+    if (typeof payload.sub === "string" && /^0x[0-9a-fA-F]{40}$/.test(payload.sub)) {
+      return payload.sub as `0x${string}`;
+    }
+    return undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 /**
  * Pull the `sub` claim out of a JWT without verifying. Both our OAuth
  * tokens and Privy JWTs put the user's wallet address in `sub`. Returns
  * undefined if the token isn't a well-formed three-part JWS or the
- * claim isn't a 0x-address. Crypto verification happens on the api when
- * the token is presented to /agent/exchange — this is only used to
- * default read tools' `user` arg to the authenticated wallet.
+ * claim isn't a 0x-address. Only used when OAuth isn't configured (bare
+ * http dev mode); crypto verification still happens on the api when the
+ * token is presented to /agent/exchange.
  */
 function decodeSubFromJwt(jwt: string): `0x${string}` | undefined {
   const parts = jwt.split(".");

@@ -28,10 +28,21 @@ export function Footer() {
             </div>
             <div className="footer-col">
               <span className="head">Community</span>
-              <a href="#">Discord</a>
-              <a href="#">GitHub</a>
-              <a href="#">llms.txt</a>
-              <a href="#">Status</a>
+              <a
+                href="https://www.alchemy.com/discord"
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                Discord
+              </a>
+              <a href="/llms.txt">llms.txt</a>
+              <a
+                href="https://www.alchemy.com/support"
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                Support
+              </a>
             </div>
           </div>
         </div>

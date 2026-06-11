@@ -1,96 +1,77 @@
 # @alchemy-hl/mcp-server
 
-MCP (Model Context Protocol) server for the Alchemy Hyperliquid trading API. Lets Claude desktop (and any other MCP-compatible host like Cursor, Continue, etc.) call our trading tools as functions.
+MCP (Model Context Protocol) server for the Alchemy Hyperliquid trading API. Powers the hosted Claude Web / ChatGPT connectors and can also run locally over stdio for Claude desktop and other MCP hosts (Cursor, Continue, etc.).
 
-## What this is
+## Tools
 
-An MCP-compliant stdio server that exposes 9 tools:
+The server exposes 10 tools:
 
-| Tool | Auth needed | What Claude can do |
+| Tool | Auth needed | What the assistant can do |
 |---|---|---|
 | `get_markets` | none | List perps + spot markets |
 | `get_market_price` | none | Read current mid price for a symbol |
 | `get_balance` | none | Read a wallet's HL perp balance |
 | `get_open_orders` | none | List resting orders for a wallet |
 | `get_approval` | none | Check builder-fee approval state |
-| `place_market_order` | trading key | Buy/sell market (IOC) by notional or size |
-| `place_limit_order` | trading key | Buy/sell limit with Gtc/Ioc/Alo |
-| `cancel_order` | trading key | Cancel a resting order by oid |
-| `approve_builder` | trading key | Sign approveBuilderFee (one-time setup or revoke) |
+| `place_market_order` | signer | Buy/sell market (IOC) by notional or size |
+| `place_limit_order` | signer | Buy/sell limit with Gtc/Ioc/Alo |
+| `cancel_order` | signer | Cancel a resting order by oid |
+| `set_leverage` | signer | Set leverage 1–50x, cross or isolated |
+| `approve_builder` | signer, user key only | Sign approveBuilderFee (setup or revoke) |
 
-Without a trading key the connector is read-only (still useful for an "analyst" agent that proposes trades for human approval).
+"Signer" is either the per-user agent key (hosted mode) or a local hot key (stdio mode). Without one, the connector is read-only — still useful for an "analyst" agent that proposes trades for human approval.
 
-## Setup
+## Two transports, two signing models
 
-### Prerequisites
+### http — hosted, multi-tenant (production)
 
-1. The Alchemy Hyperliquid backend running somewhere (locally on `:8080`, or your deployed Render service).
-2. A test wallet's private key. **Don't** use your personal MetaMask — generate a fresh one:
+This is what serves the Claude Web and ChatGPT connectors at `https://alchemy-hl-mcp.onrender.com`. Set `MCP_TRANSPORT=http`.
+
+- **Auth**: full OAuth 2.0 (RFC 8414 metadata, RFC 7591 dynamic client registration, RFC 9728 protected-resource metadata, PKCE). Requests without a Bearer token get a 401 challenge that triggers the MCP host's OAuth flow; tokens are HS256 JWTs verified against `OAUTH_SIGNING_SECRET` (shared with the api service).
+- **Signing**: no keys on this process. The user signs one `approveAgent` action during the OAuth flow (on the web app's `/oauth/authorize` page); the api derives a per-user, trade-only agent key from `AGENT_MASTER_SEED` and signs trades server-side. Agents cannot withdraw — enforced by the Hyperliquid protocol.
+- **Users**: multi-tenant; each request carries its own token, read tools default to the authenticated wallet.
+
+End users never touch this README for the hosted flow — point them at `/connect/claude` or `/connect/chatgpt` on the web app.
+
+### stdio — local, single-user (power users / dev)
+
+The default transport. The MCP host (Claude desktop) spawns the binary; one hot key in env signs all trades.
+
+1. Generate a fresh test wallet (don't use your personal key):
    ```bash
    cd packages/sdk && npx tsx scripts/generate-test-wallet.ts
    ```
-   Fund it with ~$10 USDC + a tiny bit of ETH on Arbitrum, deposit USDC into HL, and approve our builder fee from it (via the SDK or `/approve` page).
-
-### Install + build
-
-```bash
-cd packages/mcp-server
-npm install                    # one-time
-npm run build                  # produces dist/index.js
-```
-
-### Wire into Claude desktop
-
-Edit `~/Library/Application Support/Claude/claude_desktop_config.json` (macOS) or the equivalent on your OS:
-
-```json
-{
-  "mcpServers": {
-    "alchemy-hyperliquid": {
-      "command": "node",
-      "args": [
-        "/absolute/path/to/Hyperliquid exchange support/packages/mcp-server/dist/index.js"
-      ],
-      "env": {
-        "ALCHEMY_HL_API_URL": "http://localhost:8080",
-        "ALCHEMY_HL_TRADE_KEY": "0x<your test wallet private key>"
-      }
-    }
-  }
-}
-```
-
-Restart Claude desktop. Open a new conversation. The connector tools should be available — try:
-
-> What's the current BTC price on Hyperliquid?
-
-Claude should call `get_market_price` and respond with the mid.
-
-> Show me my Hyperliquid balance.
-
-Calls `get_balance` (defaulting to the trading wallet).
-
-> Buy $10 of BTC.
-
-Calls `place_market_order`. Real trade against mainnet. Reports back the fill price + size + oid.
+   Fund it with ~$10 USDC + a little ETH on Arbitrum, deposit USDC into HL, approve the builder fee (via `/approve` or the SDK).
+2. Build: `cd packages/mcp-server && npm install && npm run build`
+3. Wire into `~/Library/Application Support/Claude/claude_desktop_config.json` (macOS):
+   ```json
+   {
+     "mcpServers": {
+       "alchemy-hyperliquid": {
+         "command": "node",
+         "args": ["/absolute/path/to/packages/mcp-server/dist/index.js"],
+         "env": {
+           "ALCHEMY_HL_API_URL": "https://alchemy-hl-api.onrender.com",
+           "ALCHEMY_HL_TRADE_KEY": "0x<your test wallet private key>"
+         }
+       }
+     }
+   }
+   ```
+4. Restart Claude desktop fully (Cmd+Q) and try: *"What's the current BTC price on Hyperliquid?"*
 
 ## Environment variables
 
 | Var | Required | Default | Notes |
 |---|---|---|---|
-| `ALCHEMY_HL_API_URL` | no | `http://localhost:8080` | Where to send requests. Use your Render deployment for production. |
-| `ALCHEMY_HL_TRADE_KEY` | no | unset | Hot private key for signing trades. Without it, write tools return "no signer configured" and the connector is read-only. |
-| `LOG_LEVEL` | no | `info` | `debug` / `info` / `warn` / `error`. Logs go to stderr only. |
-
-## Phase 1 vs Phase 2
-
-This is the **Phase 1** signing model: one hot key, configured in env, all of Claude's trades signed by that key. Simple but means:
-
-- The key holder must trust whoever runs the MCP process
-- One key per server = one wallet per server (no multi-user isolation)
-- Can't run this as a hosted service safely
-
-**Phase 2 (HL API wallets / `approveAgent`)** replaces this with per-user delegated keys: each user signs a one-time `approveAgent` action authorizing a server-side key, and the server signs trades on their behalf within the authorized constraints. That's the model that makes this safe to deploy as a real hosted product. Roughly a week of work — see project plan in the main repo README.
+| `ALCHEMY_HL_API_URL` | no | `http://localhost:8080` | Backend API URL. |
+| `MCP_TRANSPORT` | no | `stdio` | `stdio` or `http`. |
+| `MCP_PORT` / `PORT` | no | `3001` | http listen port; host-injected `PORT` wins. |
+| `MCP_PUBLIC_URL` | http mode | `http://localhost:<port>` | Public URL of this server; OAuth issuer + metadata base. |
+| `WEB_PUBLIC_URL` | http mode | `http://localhost:3000` | Web app URL hosting the `/oauth/authorize` UI. |
+| `OAUTH_SIGNING_SECRET` | http mode | unset | HS256 secret, shared with the api service. Without it OAuth is disabled. |
+| `ALCHEMY_HL_TRADE_KEY` | stdio mode | unset | Hot private key. Without it, write tools return "no signer configured". |
+| `LOG_LEVEL` | no | `info` | `debug` / `info` / `warn` / `error`. |
 
 ## Stdio rule
 
@@ -103,11 +84,16 @@ MCP runs over JSON-RPC on stdio. The server uses stdout for protocol frames; **a
 - Restart Claude desktop fully (Cmd+Q, not just close window).
 - Check Claude desktop's logs (usually in `~/Library/Logs/Claude/`).
 
-**Tool call returns "no signer configured":**
-- Add `ALCHEMY_HL_TRADE_KEY` to the `env` block in `claude_desktop_config.json`. Must be the 0x-prefixed private key, not the address.
+**Hosted connector won't connect / loops on auth:**
+- `curl https://alchemy-hl-mcp.onrender.com/healthz` — `hasOauth` must be `true`.
+- `OAUTH_SIGNING_SECRET` must be identical on the api and mcp services; a mismatch makes every token fail verification with a 401 `invalid_token`.
+- Access tokens last 24h; expiry triggers a fresh OAuth handshake automatically.
+
+**Tool call returns "no signer configured" (stdio):**
+- Add `ALCHEMY_HL_TRADE_KEY` to the `env` block. Must be the 0x-prefixed private key, not the address.
 
 **Trade returns "User does not exist":**
-- The trading wallet hasn't deposited USDC into HL yet. Send some USDC to the bridge contract on Arbitrum (see `packages/sdk/scripts/smoke-trade.ts` for a working example).
+- The wallet hasn't deposited USDC into HL yet. Use the deposit flow on `/approve` or send USDC to the bridge on Arbitrum.
 
 **Trade returns "Builder has insufficient balance":**
-- Alchemy's builder wallet itself isn't funded. That's a one-time ops setup separate from the user's test wallet — see the main repo README.
+- Alchemy's builder wallet itself isn't funded (needs ≥ 100 USDC in HL perps). One-time ops setup — see the main repo README.

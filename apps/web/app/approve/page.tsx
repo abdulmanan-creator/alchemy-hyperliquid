@@ -509,7 +509,13 @@ function ApprovedCard(props: {
 
       <div className="card-foot">
         <span>You can revoke any time</span>
-        <a href="#">Order history ↗</a>
+        <a
+          href="https://app.hyperliquid.xyz/historicalOrders"
+          target="_blank"
+          rel="noopener noreferrer"
+        >
+          Order history ↗
+        </a>
       </div>
     </CardShell>
   );
@@ -567,7 +573,7 @@ No funds move from this signature.`}
 
       <div className="card-foot">
         <span>Arbitrum One · chainId 42161</span>
-        <a href="#">Trouble signing?</a>
+        <a href="/#faq">Trouble signing?</a>
       </div>
     </CardShell>
   );
@@ -619,7 +625,13 @@ function ErrorCard(props: {
 
       <div className="card-foot">
         <span>Arbitrum One · chainId 42161</span>
-        <a href="#">Contact support</a>
+        <a
+          href="https://www.alchemy.com/support"
+          target="_blank"
+          rel="noopener noreferrer"
+        >
+          Contact support
+        </a>
       </div>
     </CardShell>
   );
