@@ -120,6 +120,79 @@ export function buildMarketOrder(p: MarketOrderParams): OrderAction {
   return { type: "order", grouping: "na", orders: [leg] };
 }
 
+export interface TriggerOrderParams {
+  assetIndex: number;
+  /** See LimitOrderParams.szDecimals. */
+  szDecimals: number;
+  /** See LimitOrderParams.isSpot. */
+  isSpot?: boolean;
+  /** Direction of the trigger order itself (to close a long, this is "sell"). */
+  side: "buy" | "sell";
+  /** Order size in base units. */
+  size: string | number;
+  /** Price at which the trigger fires (HL mark-price based). */
+  triggerPrice: string | number;
+  /** "tp" = take-profit, "sl" = stop-loss. Affects HL's trigger semantics. */
+  tpsl: "tp" | "sl";
+  /**
+   * Execute as market when triggered (default true). When false, the order
+   * rests at `limitPrice` after triggering.
+   */
+  isMarket?: boolean;
+  /**
+   * Limit price once triggered. Required when `isMarket` is false. For
+   * market triggers it bounds the worst acceptable fill — defaults to
+   * triggerPrice ± 10% in the aggressive direction.
+   */
+  limitPrice?: string | number;
+  /** TP/SL protect an existing position, so this defaults to TRUE. */
+  reduceOnly?: boolean;
+  cloid?: `0x${string}`;
+}
+
+/**
+ * Build a standalone trigger order (take-profit or stop-loss). Uses HL's
+ * trigger leg type: fires when mark price crosses `triggerPrice`, then
+ * executes as market (default) or rests at `limitPrice`.
+ */
+export function buildTriggerOrder(p: TriggerOrderParams): OrderAction {
+  if (p.isMarket === false && p.limitPrice === undefined) {
+    throw new SdkInputError(
+      "Trigger order with isMarket=false requires `limitPrice` (the price the order rests at after triggering).",
+    );
+  }
+  const trigger = Number(p.triggerPrice);
+  if (!Number.isFinite(trigger) || trigger <= 0) {
+    throw new SdkInputError(`triggerPrice must be a positive number, got: ${p.triggerPrice}`);
+  }
+  // Market triggers still carry a limit price on the wire — it bounds the
+  // worst acceptable fill. Default: 10% beyond the trigger in the aggressive
+  // direction (buy fills up to +10%, sell down to -10%).
+  const limit =
+    p.limitPrice !== undefined
+      ? Number(p.limitPrice)
+      : p.side === "buy"
+        ? trigger * 1.1
+        : trigger * 0.9;
+
+  const leg: OrderLeg = {
+    a: p.assetIndex,
+    b: p.side === "buy",
+    p: roundPrice(limit, p.szDecimals, !!p.isSpot),
+    s: roundSize(p.size, p.szDecimals),
+    r: p.reduceOnly ?? true,
+    t: {
+      trigger: {
+        isMarket: p.isMarket ?? true,
+        triggerPx: roundPrice(trigger, p.szDecimals, !!p.isSpot),
+        tpsl: p.tpsl,
+      },
+    },
+  };
+  if (p.cloid) leg.c = p.cloid;
+  return { type: "order", grouping: "na", orders: [leg] };
+}
+
 export function buildCancel(items: { assetIndex: number; oid: number }[]): CancelAction {
   if (!items.length) throw new SdkInputError("cancel requires at least one item.");
   return {

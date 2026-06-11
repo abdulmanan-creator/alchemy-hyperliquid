@@ -37,13 +37,19 @@
  * ```
  */
 
-export { Alchemy, type ClientOptions, type OrderResult } from "./client.js";
+export { Alchemy, type ClientOptions, type OrderResult, type TriggerOpts } from "./client.js";
 export { AlchemyHlError, SdkInputError } from "./errors.js";
 export type { ApiError, ErrorCode } from "./errors.js";
 export type { Signer, SignerConfig, SignTypedDataParams } from "./signer.js";
 export { normalizeHexSig, makeSigner } from "./signer.js";
 export type { AssetInfo } from "./assets.js";
-export type { LimitOrderParams, MarketOrderParams, Tif } from "./actions.js";
+export type {
+  LimitOrderParams,
+  MarketOrderParams,
+  Tif,
+  TriggerOrderParams,
+} from "./actions.js";
+export { buildTriggerOrder } from "./actions.js";
 
 // Re-export shared types for convenience so consumers don't need a second import.
 export type {
@@ -53,6 +59,10 @@ export type {
   BuildResponse,
   DexesResponse,
   MarketsResponse,
+  PerpPosition,
+  PositionsResponse,
   SendResponse,
   Signature,
+  UserFill,
+  UserFillsResponse,
 } from "@alchemy-hl/shared";

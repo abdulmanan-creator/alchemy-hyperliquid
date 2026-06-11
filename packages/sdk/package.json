@@ -11,7 +11,9 @@
       "import": "./dist/index.js"
     }
   },
-  "files": ["dist"],
+  "files": [
+    "dist"
+  ],
   "scripts": {
     "build": "tsc -b",
     "dev": "tsc -b --watch",
@@ -29,5 +31,25 @@
     "tsx": "^4.19.0",
     "typescript": "^5.4.5",
     "vitest": "^2.0.5"
-  }
+  },
+  "description": "Zero-custody TypeScript SDK for trading on Hyperliquid through Alchemy's builder API \u2014 local signing, market/limit/TP-SL orders, positions, agent mode.",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/abdulmanan-creator/alchemy-hyperliquid.git",
+    "directory": "packages/sdk"
+  },
+  "keywords": [
+    "hyperliquid",
+    "trading",
+    "perps",
+    "alchemy",
+    "builder-code",
+    "defi",
+    "sdk"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
+  "sideEffects": false
 }

@@ -22,7 +22,10 @@ import type {
   BuildResponse,
   DexesResponse,
   MarketsResponse,
+  PerpPosition,
+  PositionsResponse,
   SendResponse,
+  UserFillsResponse,
 } from "@alchemy-hl/shared";
 
 /**
@@ -58,9 +61,11 @@ import {
   buildCancel,
   buildLimitOrder,
   buildMarketOrder,
+  buildTriggerOrder,
   buildUpdateLeverage,
   type LimitOrderParams,
   type MarketOrderParams,
+  type TriggerOrderParams,
 } from "./actions.js";
 import { AssetCache, type AssetInfo } from "./assets.js";
 import { AlchemyHlError, SdkInputError, type ApiError } from "./errors.js";
@@ -161,6 +166,20 @@ export class Alchemy {
     return this.post<unknown>("/openOrders", { user: addr });
   }
 
+  /** Open perp positions with per-position PnL. Defaults to the signer's wallet. */
+  positions(user?: `0x${string}`): Promise<PositionsResponse> {
+    const addr = user ?? this.requireSignerAddress();
+    return this.get<PositionsResponse>(`/positions?user=${encodeURIComponent(addr)}`);
+  }
+
+  /** Recent fills, newest first. Defaults to the signer's wallet. */
+  userFills(user?: `0x${string}`, limit = 20): Promise<UserFillsResponse> {
+    const addr = user ?? this.requireSignerAddress();
+    return this.get<UserFillsResponse>(
+      `/userFills?user=${encodeURIComponent(addr)}&limit=${limit}`,
+    );
+  }
+
   orderStatus(oid: number, user?: `0x${string}`): Promise<unknown> {
     const addr = user ?? this.requireSignerAddress();
     return this.post<unknown>("/orderStatus", { user: addr, oid });
@@ -189,6 +208,7 @@ export class Alchemy {
   async limitOrder(
     p: Omit<LimitOrderParams, "assetIndex" | "szDecimals" | "isSpot"> & {
       symbol: string;
+      idempotencyKey?: string;
     },
   ): Promise<OrderResult> {
     const asset = await this.assets.resolve(p.symbol);
@@ -198,7 +218,7 @@ export class Alchemy {
       szDecimals: asset.szDecimals,
       isSpot: asset.isSpot,
     });
-    const sent = await this.signAndSend(action);
+    const sent = await this.signAndSend(action, p.idempotencyKey);
     return parseOrderResult(sent);
   }
 
@@ -215,6 +235,7 @@ export class Alchemy {
     symbol: string,
     opts: Omit<MarketOrderParams, "assetIndex" | "side" | "markPrice" | "szDecimals" | "isSpot"> & {
       markPrice?: MarketOrderParams["markPrice"];
+      idempotencyKey?: string;
     } = {},
   ): Promise<OrderResult> {
     return this.marketOrder({ ...opts, symbol, side: "buy" });
@@ -224,6 +245,7 @@ export class Alchemy {
     symbol: string,
     opts: Omit<MarketOrderParams, "assetIndex" | "side" | "markPrice" | "szDecimals" | "isSpot"> & {
       markPrice?: MarketOrderParams["markPrice"];
+      idempotencyKey?: string;
     } = {},
   ): Promise<OrderResult> {
     return this.marketOrder({ ...opts, symbol, side: "sell" });
@@ -232,6 +254,7 @@ export class Alchemy {
   /** Cancel one or more open orders by oid. */
   async cancel(
     items: { symbol: string; oid: number }[] | { symbol: string; oid: number },
+    opts: { idempotencyKey?: string } = {},
   ): Promise<SendResponse> {
     const arr = Array.isArray(items) ? items : [items];
     const resolved = await Promise.all(
@@ -241,7 +264,7 @@ export class Alchemy {
       })),
     );
     const action = buildCancel(resolved);
-    return this.signAndSend(action);
+    return this.signAndSend(action, opts.idempotencyKey);
   }
 
   /**
@@ -294,14 +317,136 @@ export class Alchemy {
     return this.signAndSend(action);
   }
 
+  /**
+   * Close an open position with a reduce-only market order. Looks up the
+   * current position to determine direction and (unless `size` is given)
+   * closes the full size.
+   *
+   * @example
+   *   sdk.closePosition("BTC")               // flatten BTC entirely
+   *   sdk.closePosition("ETH", { size: 1 })  // close 1 ETH of the position
+   */
+  async closePosition(
+    symbol: string,
+    opts: { size?: string | number; slippageBps?: number; idempotencyKey?: string } = {},
+  ): Promise<OrderResult> {
+    const position = await this.findPosition(symbol);
+    if (!position) {
+      throw new SdkInputError(
+        `No open ${symbol} position to close. Check sdk.positions() for what's open.`,
+      );
+    }
+    return this.marketOrder({
+      symbol,
+      side: position.side === "long" ? "sell" : "buy",
+      size: opts.size ?? position.size,
+      slippageBps: opts.slippageBps,
+      reduceOnly: true,
+      idempotencyKey: opts.idempotencyKey,
+    });
+  }
+
+  /**
+   * Place a take-profit trigger order. Fires when mark price crosses
+   * `triggerPrice`, then executes as market (default). Reduce-only by
+   * default — it protects an existing position. Direction and size default
+   * from the open position (closing direction, full size).
+   *
+   * @example
+   *   sdk.takeProfit("BTC", { triggerPrice: 120000 })
+   */
+  async takeProfit(
+    symbol: string,
+    opts: TriggerOpts,
+  ): Promise<OrderResult> {
+    return this.triggerOrder(symbol, "tp", opts);
+  }
+
+  /**
+   * Place a stop-loss trigger order. Same semantics as {@link takeProfit}
+   * but with HL's "sl" trigger behavior.
+   *
+   * @example
+   *   sdk.stopLoss("BTC", { triggerPrice: 85000 })
+   */
+  async stopLoss(
+    symbol: string,
+    opts: TriggerOpts,
+  ): Promise<OrderResult> {
+    return this.triggerOrder(symbol, "sl", opts);
+  }
+
   // ==========================================================================
   // Internals
   // ==========================================================================
+
+  private async triggerOrder(
+    symbol: string,
+    tpsl: "tp" | "sl",
+    opts: TriggerOpts,
+  ): Promise<OrderResult> {
+    const asset = await this.assets.resolve(symbol);
+
+    let side = opts.side;
+    let size = opts.size;
+    if (side === undefined || size === undefined) {
+      const position = await this.findPosition(symbol);
+      if (!position) {
+        throw new SdkInputError(
+          `No open ${symbol} position to derive ${tpsl} direction/size from. Pass explicit \`side\` and \`size\`, or open a position first.`,
+        );
+      }
+      side = side ?? (position.side === "long" ? "sell" : "buy");
+      size = size ?? position.size;
+    }
+
+    const action = buildTriggerOrder({
+      assetIndex: asset.assetIndex,
+      szDecimals: asset.szDecimals,
+      isSpot: asset.isSpot,
+      side,
+      size,
+      triggerPrice: opts.triggerPrice,
+      tpsl,
+      isMarket: opts.isMarket,
+      limitPrice: opts.limitPrice,
+      reduceOnly: opts.reduceOnly,
+      cloid: opts.cloid,
+    });
+    const sent = await this.signAndSend(action, opts.idempotencyKey);
+    return parseOrderResult(sent);
+  }
+
+  /** Position lookup keyed by HL coin name (case-insensitive). */
+  private async findPosition(symbol: string): Promise<PerpPosition | undefined> {
+    const { positions } = await this.positions(await this.ownAddress());
+    const target = symbol.toLowerCase();
+    return positions.find((p) => p.coin.toLowerCase() === target);
+  }
+
+  /**
+   * The wallet whose account trading methods act on. With a local signer
+   * that's the signer address. In agent mode the backend derives it from the
+   * JWT, but reads still need it client-side — resolved via the token's
+   * `sub` claim (our OAuth access tokens put the wallet address there).
+   */
+  private async ownAddress(): Promise<`0x${string}`> {
+    if (this.signer) return this.signer.address;
+    if (this.agentJwt) {
+      const sub = decodeJwtSub(this.agentJwt);
+      if (sub) return sub;
+      throw new SdkInputError(
+        "Could not determine the wallet address from the agent JWT. Pass `user` explicitly to read methods.",
+      );
+    }
+    return this.requireSignerAddress(); // throws with the standard guidance
+  }
 
   private async marketOrder(
     p: Omit<MarketOrderParams, "assetIndex" | "markPrice" | "szDecimals" | "isSpot"> & {
       symbol: string;
       markPrice?: MarketOrderParams["markPrice"];
+      idempotencyKey?: string;
     },
   ): Promise<OrderResult> {
     const asset = await this.assets.resolve(p.symbol);
@@ -318,15 +463,15 @@ export class Alchemy {
       isSpot: asset.isSpot,
       markPrice,
     });
-    const sent = await this.signAndSend(action);
+    const sent = await this.signAndSend(action, p.idempotencyKey);
     return parseOrderResult(sent);
   }
 
-  private async signAndSend(action: unknown): Promise<SendResponse> {
+  private async signAndSend(action: unknown, idempotencyKey?: string): Promise<SendResponse> {
     // Agent mode: backend signs server-side via the user's derived agent key.
     // No build/sign dance — single POST to /agent/exchange with the JWT.
     if (this.agentJwt) {
-      return this.agentSend(action);
+      return this.agentSend(action, idempotencyKey);
     }
 
     const signer = this.requireSigner();
@@ -365,8 +510,14 @@ export class Alchemy {
    * the JWT, derives the user's agent key from AGENT_MASTER_SEED, signs the
    * action, forwards to HL. Used by the MCP server when serving Claude/ChatGPT.
    */
-  private async agentSend(action: unknown): Promise<SendResponse> {
-    return this.request<SendResponse>("POST", "/agent/exchange", { action });
+  private async agentSend(action: unknown, idempotencyKey?: string): Promise<SendResponse> {
+    // idempotencyKey: backend dedupe for the agent path — a retry with the
+    // same key replays the original response instead of double-trading. The
+    // user-signed path doesn't need it (the signature itself is the dedupe).
+    return this.request<SendResponse>("POST", "/agent/exchange", {
+      action,
+      ...(idempotencyKey ? { idempotencyKey } : {}),
+    });
   }
 
   private get<T>(path: string): Promise<T> {
@@ -428,8 +579,56 @@ export class Alchemy {
   }
 }
 
+/** Options shared by takeProfit / stopLoss. */
+export interface TriggerOpts {
+  /** Mark price at which the trigger fires. */
+  triggerPrice: string | number;
+  /** Defaults to the closing direction of the open position. */
+  side?: "buy" | "sell";
+  /** Defaults to the full open position size. */
+  size?: string | number;
+  /** Execute as market when triggered (default true). */
+  isMarket?: boolean;
+  /** Resting price after trigger when isMarket=false; fill bound otherwise. */
+  limitPrice?: string | number;
+  /** Default true — TP/SL protect an existing position. */
+  reduceOnly?: boolean;
+  cloid?: `0x${string}`;
+  /** Agent-mode dedupe key — see /agent/exchange idempotency. */
+  idempotencyKey?: string;
+}
+
 function isSignerConfig(opts: ClientOptions): opts is ClientOptions & SignerConfig {
   return "privateKey" in opts || ("account" in opts && "signTypedDataAsync" in opts);
+}
+
+/** Decode a JWT's `sub` claim without verifying (read-side default only). */
+function decodeJwtSub(jwt: string): `0x${string}` | undefined {
+  const parts = jwt.split(".");
+  if (parts.length !== 3) return undefined;
+  try {
+    const b64 = parts[1]!.replace(/-/g, "+").replace(/_/g, "/");
+    const padded = b64.padEnd(b64.length + ((4 - (b64.length % 4)) % 4), "=");
+    // atob exists in browsers and Node 16+. Older Node falls back to Buffer,
+    // looked up dynamically so this package needs no Node type definitions.
+    const nodeBuffer = (
+      globalThis as {
+        Buffer?: { from(s: string, enc: string): { toString(enc: string): string } };
+      }
+    ).Buffer;
+    const decoded =
+      typeof atob === "function"
+        ? atob(padded)
+        : nodeBuffer
+          ? nodeBuffer.from(padded, "base64").toString("utf8")
+          : "";
+    const payload = JSON.parse(decoded) as { sub?: string };
+    return typeof payload.sub === "string" && /^0x[0-9a-fA-F]{40}$/.test(payload.sub)
+      ? (payload.sub as `0x${string}`)
+      : undefined;
+  } catch {
+    return undefined;
+  }
 }
 
 /**

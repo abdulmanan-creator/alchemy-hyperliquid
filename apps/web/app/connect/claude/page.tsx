@@ -30,7 +30,8 @@ export default function ConnectClaudePage() {
           <span className="eyebrow">AI Connector</span>
           <h1>Trade with Claude</h1>
           <p>
-            Add ten Hyperliquid trading tools to Claude. Ask in natural
+            Add Hyperliquid trading tools to Claude — prices, positions,
+            orders, TP/SL, and more. Ask in natural
             language; Claude calls the tools, our backend signs trades using
             an agent key you authorized once.
           </p>
@@ -84,8 +85,8 @@ export default function ConnectClaudePage() {
         <Step n={3} title='Set Name to "Alchemy Hyperliquid", paste the URL'>
           <p>
             Paste the URL from step 1 into &ldquo;Remote MCP server URL&rdquo;
-            and save. Claude fetches our tool list and shows the ten
-            available functions.
+            and save. Claude fetches our tool list and shows the available
+            functions.
           </p>
         </Step>
 

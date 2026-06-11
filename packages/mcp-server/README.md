@@ -4,17 +4,21 @@ MCP (Model Context Protocol) server for the Alchemy Hyperliquid trading API. Pow
 
 ## Tools
 
-The server exposes 10 tools:
+The server exposes 14 tools:
 
 | Tool | Auth needed | What the assistant can do |
 |---|---|---|
 | `get_markets` | none | List perps + spot markets |
 | `get_market_price` | none | Read current mid price for a symbol |
 | `get_balance` | none | Read a wallet's HL perp balance |
+| `get_positions` | none | Open positions with live PnL, liq price, leverage |
 | `get_open_orders` | none | List resting orders for a wallet |
+| `get_fills` | none | Recent executions with fees + closed PnL |
 | `get_approval` | none | Check builder-fee approval state |
 | `place_market_order` | signer | Buy/sell market (IOC) by notional or size |
 | `place_limit_order` | signer | Buy/sell limit with Gtc/Ioc/Alo |
+| `place_trigger_order` | signer | Take-profit / stop-loss, reduce-only by default |
+| `close_position` | signer | Flatten a position (full or partial) reduce-only |
 | `cancel_order` | signer | Cancel a resting order by oid |
 | `set_leverage` | signer | Set leverage 1–50x, cross or isolated |
 | `approve_builder` | signer, user key only | Sign approveBuilderFee (setup or revoke) |

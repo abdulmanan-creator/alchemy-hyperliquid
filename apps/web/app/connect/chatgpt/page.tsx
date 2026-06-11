@@ -28,7 +28,7 @@ export default function ConnectChatGptPage() {
           <span className="eyebrow">AI Connector</span>
           <h1>Trade with ChatGPT</h1>
           <p>
-            Add ten Hyperliquid trading tools to ChatGPT via its Apps SDK.
+            Add Hyperliquid trading tools to ChatGPT via its Apps SDK.
             Same MCP server as the Claude connector &mdash; ChatGPT uses MCP
             over HTTP, so one URL serves both.
           </p>
@@ -54,7 +54,7 @@ export default function ConnectChatGptPage() {
         <Step n={3} title='Create a new app named "Alchemy Hyperliquid"'>
           <p>
             Paste the URL into the Server URL field and save. ChatGPT does
-            an MCP handshake and discovers our ten tools.
+            an MCP handshake and discovers our tools.
           </p>
         </Step>
 

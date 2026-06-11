@@ -5,27 +5,45 @@ import Link from "next/link";
 
 type Lang = "python" | "ts" | "rust" | "go";
 
+// TypeScript ships as a full SDK. Other languages integrate over the same
+// REST API: POST /exchange to build (server injects the builder fee +
+// returns EIP-712 typed data), sign locally with any EIP-712 library, POST
+// back to send. Keys never leave the caller's machine in any language.
 const SNIPPETS: Record<Lang, string> = {
-  ts: `import { Alchemy } from "@alchemy/hyperliquid";
+  ts: `import { Alchemy } from "@alchemy-hl/sdk";
 const sdk = new Alchemy({ privateKey: process.env.PK });
-// Market buy $100 of BTC
+// Market buy $100 of BTC — TP/SL, positions, fills all built in
 const order = await sdk.marketBuy("BTC", { notional: 100 });
 console.log(\`Filled \${order.filledSize} @ $\${order.avgPrice}\`);`,
-  python: `from alchemy_hyperliquid import Alchemy
-sdk = Alchemy(private_key=key)
-# Market buy $100 of BTC
-order = sdk.market_buy("BTC", notional=100)
-print(f"Filled {order.filled_size} @ \${order.avg_price}")`,
-  rust: `use alchemy_hyperliquid::Alchemy;
-let sdk = Alchemy::new(env!("PK"));
-// Market buy $100 of BTC
-let order = sdk.market_buy("BTC", Notional(100)).await?;
-println!("Filled {} @ \${}", order.filled_size, order.avg_price);`,
-  go: `import "github.com/alchemyplatform/hyperliquid-go"
-sdk := hyperliquid.New(os.Getenv("PK"))
-// Market buy $100 of BTC
-order, _ := sdk.MarketBuy("BTC", &hyperliquid.Opts{Notional: 100})
-fmt.Printf("Filled %v @ $%v\\n", order.FilledSize, order.AvgPrice)`,
+  python: `import requests
+from eth_account import Account
+
+API = "https://alchemy-hl-api.onrender.com"
+order = {"type": "order", "grouping": "na", "orders": [
+  {"a": 0, "b": True, "p": "105000", "s": "0.001", "r": False,
+   "t": {"limit": {"tif": "Ioc"}}}]}
+
+# Build (server injects builder fee) -> sign locally -> send
+built = requests.post(f"{API}/exchange", json={"action": order}).json()
+signed = Account.sign_typed_data(PK, full_message=built["typedData"])
+requests.post(f"{API}/exchange", json={
+  "action": built["action"], "nonce": built["nonce"],
+  "signature": {"r": hex(signed.r), "s": hex(signed.s), "v": signed.v}})`,
+  rust: `// REST + any EIP-712 signer (alloy / ethers)
+let built: Build = http.post(format!("{API}/exchange"))
+    .json(&json!({ "action": order })).send().await?.json().await?;
+// Sign locally — the key never leaves this process
+let sig = wallet.sign_typed_data(&built.typed_data).await?;
+http.post(format!("{API}/exchange"))
+    .json(&json!({ "action": built.action, "nonce": built.nonce,
+                   "signature": sig })).send().await?;`,
+  go: `// REST + go-ethereum apitypes for EIP-712
+built := postJSON(API+"/exchange", M{"action": order})
+// Sign locally — the key never leaves this process
+sig := signTypedData(pk, built.TypedData)
+postJSON(API+"/exchange", M{
+    "action": built.Action, "nonce": built.Nonce, "signature": sig,
+})`,
 };
 
 export function Hero() {
@@ -68,7 +86,7 @@ export function Hero() {
         </div>
 
         <div className="hero-pills">
-          <span className="pill blue">4 SDKs</span>
+          <span className="pill blue">TypeScript SDK + REST</span>
           <span className="pill">Zero custody</span>
           <span className="pill cyan">Perps &amp; Spot</span>
           <span className="pill violet">HIP-3 &amp; HIP-4 Markets</span>

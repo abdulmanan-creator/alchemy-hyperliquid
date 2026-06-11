@@ -228,9 +228,169 @@ export function buildTools(cfg: Config): Tool[] {
       },
     },
 
+    {
+      name: "get_positions",
+      description:
+        "List a wallet's open perpetual positions on Hyperliquid with live PnL. Each entry includes side (long/short), size, entry price, current value, unrealized PnL with return-on-equity, liquidation price, and leverage. Use this to answer 'what am I holding?', before closing positions, or to size take-profit/stop-loss orders. Defaults to the authenticated wallet.",
+      inputSchema: z.object({
+        user: z.string().regex(/^0x[0-9a-fA-F]{40}$/).optional(),
+      }),
+      async handler(rawArgs, auth) {
+        const { user } = z
+          .object({ user: z.string().regex(/^0x[0-9a-fA-F]{40}$/).optional() })
+          .parse(rawArgs ?? {});
+        const effectiveUser = (user as `0x${string}` | undefined) ?? auth.userAddress;
+        if (effectiveUser) {
+          return JSON.stringify(await readSdk.positions(effectiveUser), null, 2);
+        }
+        if (hotSdk) {
+          return JSON.stringify(await hotSdk.positions(), null, 2);
+        }
+        return JSON.stringify(
+          { error: "Pass `user` explicitly — no auth context to default from." },
+          null,
+          2,
+        );
+      },
+    },
+
+    {
+      name: "get_fills",
+      description:
+        "Recent trade fills (executions) for a wallet, newest first. Each fill includes symbol, price, size, direction (Open Long / Close Short / ...), fee paid, closed PnL when the fill reduced a position, and timestamp. Use to answer 'what did I trade recently?' or to confirm an order actually executed. Defaults to the authenticated wallet.",
+      inputSchema: z.object({
+        user: z.string().regex(/^0x[0-9a-fA-F]{40}$/).optional(),
+        limit: z
+          .number()
+          .int()
+          .positive()
+          .max(100)
+          .default(20)
+          .describe("How many fills to return (newest first). Default 20."),
+      }),
+      async handler(rawArgs, auth) {
+        const args = z
+          .object({
+            user: z.string().regex(/^0x[0-9a-fA-F]{40}$/).optional(),
+            limit: z.number().int().positive().max(100).default(20),
+          })
+          .parse(rawArgs ?? {});
+        const effectiveUser = (args.user as `0x${string}` | undefined) ?? auth.userAddress;
+        if (effectiveUser) {
+          return JSON.stringify(await readSdk.userFills(effectiveUser, args.limit), null, 2);
+        }
+        if (hotSdk) {
+          return JSON.stringify(await hotSdk.userFills(undefined, args.limit), null, 2);
+        }
+        return JSON.stringify(
+          { error: "Pass `user` explicitly — no auth context to default from." },
+          null,
+          2,
+        );
+      },
+    },
+
     // ========================================================================
     // Write tools — require ALCHEMY_HL_TRADE_KEY
     // ========================================================================
+
+    {
+      name: "close_position",
+      description:
+        "Close an open perpetual position with a reduce-only market order. Looks up the current position to determine direction; closes the full size unless `size` is given (partial close). Safe by construction — reduce-only orders can never open or flip a position. Returns the fill details. If there's no open position for the symbol, returns an error explaining that.",
+      inputSchema: z.object({
+        symbol: z.string().describe("Asset symbol of the position to close, like 'BTC'."),
+        size: z
+          .number()
+          .positive()
+          .optional()
+          .describe("Partial close size in base units. Omit to close the full position."),
+      }),
+      async handler(rawArgs, auth) {
+        const lock = requireSigner("close_position", auth);
+        if (lock) return lock;
+        const args = z
+          .object({ symbol: z.string(), size: z.number().positive().optional() })
+          .parse(rawArgs);
+        const sdk = sdkForWrite(auth)!;
+        try {
+          const result = await sdk.closePosition(args.symbol, { size: args.size });
+          if (result.error) {
+            return JSON.stringify({ ok: false, error: result.error }, null, 2);
+          }
+          return JSON.stringify(
+            {
+              ok: true,
+              closed: result.filled,
+              filledSize: result.filledSize,
+              avgPrice: result.avgPrice,
+              oid: result.oid,
+              user: result.user,
+            },
+            null,
+            2,
+          );
+        } catch (err) {
+          return errToMessage(err);
+        }
+      },
+    },
+
+    {
+      name: "place_trigger_order",
+      description:
+        "Place a take-profit or stop-loss trigger order on Hyperliquid. The order fires when the mark price crosses `triggerPrice`, then executes as a market order. Reduce-only by default — it protects an existing position and can never open a new one. Direction and size default from the open position (the closing direction, full size); pass `side`/`size` explicitly to override. Example: long 0.5 BTC from $97k → place_trigger_order(symbol='BTC', kind='sl', triggerPrice=90000) sells the whole position if BTC drops to $90k.",
+      inputSchema: z.object({
+        symbol: z.string().describe("Asset symbol like 'BTC'."),
+        kind: z.enum(["tp", "sl"]).describe("'tp' = take-profit, 'sl' = stop-loss."),
+        triggerPrice: z.number().positive().describe("Mark price that fires the trigger."),
+        size: z.number().positive().optional().describe("Base-unit size. Defaults to the full open position."),
+        side: z
+          .enum(["buy", "sell"])
+          .optional()
+          .describe("Defaults to the closing direction of the open position."),
+      }),
+      async handler(rawArgs, auth) {
+        const lock = requireSigner("place_trigger_order", auth);
+        if (lock) return lock;
+        const args = z
+          .object({
+            symbol: z.string(),
+            kind: z.enum(["tp", "sl"]),
+            triggerPrice: z.number().positive(),
+            size: z.number().positive().optional(),
+            side: z.enum(["buy", "sell"]).optional(),
+          })
+          .parse(rawArgs);
+        const sdk = sdkForWrite(auth)!;
+        try {
+          const fn = args.kind === "tp" ? sdk.takeProfit.bind(sdk) : sdk.stopLoss.bind(sdk);
+          const result = await fn(args.symbol, {
+            triggerPrice: args.triggerPrice,
+            size: args.size,
+            side: args.side,
+          });
+          if (result.error) {
+            return JSON.stringify({ ok: false, error: result.error }, null, 2);
+          }
+          return JSON.stringify(
+            {
+              ok: true,
+              kind: args.kind,
+              triggerPrice: args.triggerPrice,
+              // Trigger orders rest until fired — restingOid is the handle
+              // for cancel_order.
+              restingOid: result.restingOid ?? result.oid,
+              user: result.user,
+            },
+            null,
+            2,
+          );
+        } catch (err) {
+          return errToMessage(err);
+        }
+      },
+    },
 
     {
       name: "place_market_order",
