@@ -9,6 +9,7 @@ import rateLimit from "@fastify/rate-limit";
 
 import { loadConfig } from "./config.js";
 import { ApiException, sendError } from "./errors.js";
+import { metrics } from "./helpers/metrics.js";
 import { registerRoutes } from "./routes/index.js";
 
 // Load .env from the monorepo root if present. Optional — on Render env vars
@@ -79,6 +80,21 @@ await app.register(rateLimit, {
   max: 30,
   timeWindow: "1 second",
   // Per-IP. Behind Render's proxy `trustProxy: true` gets us the real client IP.
+  // Write paths (/exchange, /agent/exchange) carry their own tighter bucket —
+  // see WRITE_RATE_LIMIT in routes/exchange.ts.
+});
+
+// Request counts by route template (not raw URL — keeps label cardinality
+// bounded), method, and status. Excludes /metrics itself to avoid the
+// scraper inflating its own numbers.
+app.addHook("onResponse", async (req, reply) => {
+  const route = req.routeOptions?.url ?? "unmatched";
+  if (route === "/metrics") return;
+  metrics.httpRequests.inc({
+    route,
+    method: req.method,
+    status: reply.statusCode,
+  });
 });
 
 app.setErrorHandler((err, req, reply) => {
@@ -107,6 +123,26 @@ app.get("/healthz", async () => ({ ok: true, builder: config.ALCHEMY_BUILDER_ADD
 // over a global preHandler so unauth'd endpoints stay fast.
 
 await registerRoutes(app);
+
+// Graceful shutdown: Render sends SIGTERM on deploys/restarts. fastify.close()
+// stops accepting new connections and waits for in-flight requests (an order
+// mid-forward to HL completes instead of dying with a socket reset). The
+// 10s force-exit covers a hung upstream holding a request open past Render's
+// kill window.
+for (const signal of ["SIGTERM", "SIGINT"] as const) {
+  process.once(signal, () => {
+    app.log.info({ signal }, "shutdown_start");
+    const force = setTimeout(() => {
+      app.log.warn("shutdown_forced");
+      process.exit(1);
+    }, 10_000);
+    force.unref();
+    void app.close().then(() => {
+      app.log.info("shutdown_complete");
+      process.exit(0);
+    });
+  });
+}
 
 try {
   await app.listen({ port: config.PORT, host: "0.0.0.0" });

@@ -13,8 +13,11 @@ import {
 } from "../helpers/agent.js";
 import { phantomAgentTypedData } from "../helpers/hash.js";
 import { HlClient } from "../helpers/hlClient.js";
+import { metrics, recordOrderOutcome } from "../helpers/metrics.js";
 import { verifyPrivyAuth } from "../helpers/privyAuth.js";
 import { ActionSchema, ApprovalQuerySchema } from "../schemas.js";
+import { TtlCache, cachedAsync } from "../helpers/ttlCache.js";
+import { WRITE_RATE_LIMIT } from "./exchange.js";
 
 /**
  * GET /agent?user=0x... → { user, agentAddress, agentName }
@@ -107,10 +110,22 @@ export async function agentRoute(app: FastifyInstance): Promise<void> {
     });
   });
 
+  // Idempotency for unattended trading. Unlike /exchange (where the client's
+  // signature makes replays detectable), this path mints a fresh nonce per
+  // request — so a blind retry from an MCP host (Claude re-running a tool
+  // call that looked like it timed out) would place a *second* live order.
+  // Callers pass `idempotencyKey` (any string ≤128 chars, unique per logical
+  // order); repeats within the window get the original response back,
+  // including coalescing onto a still-in-flight first attempt.
+  const idempotentResponses = new TtlCache<Promise<SendResponse>>({
+    ttlMs: 10 * 60_000,
+    maxEntries: 20_000,
+  });
+
   // -------------------------------------------------------------------------
   // POST /agent/exchange — authenticated agent-signing.
   // -------------------------------------------------------------------------
-  app.post("/agent/exchange", async (req, reply) => {
+  app.post("/agent/exchange", { config: { rateLimit: WRITE_RATE_LIMIT } }, async (req, reply) => {
     // 1. Verify Privy JWT, resolve to the user's wallet address.
     const auth = await verifyPrivyAuth(req.headers.authorization, app.config);
 
@@ -124,8 +139,19 @@ export async function agentRoute(app: FastifyInstance): Promise<void> {
 
     // 2. Validate body shape.
     let action: Action;
+    let idempotencyKey: string | undefined;
     try {
-      const body = req.body as { action: unknown };
+      const body = req.body as { action: unknown; idempotencyKey?: unknown };
+      if (typeof body?.idempotencyKey === "string" && body.idempotencyKey.length > 0) {
+        if (body.idempotencyKey.length > 128) {
+          throw new ApiException(
+            "INVALID_PARAMS",
+            "idempotencyKey must be at most 128 characters.",
+            "Use a short unique string per logical order — a UUID works.",
+          );
+        }
+        idempotencyKey = body.idempotencyKey;
+      }
       if (!body?.action) {
         throw new ApiException(
           "INVALID_PARAMS",
@@ -172,49 +198,75 @@ export async function agentRoute(app: FastifyInstance): Promise<void> {
       injectBuilder(action, app.config);
     }
 
-    // 5. Derive the user's agent key, build the L1 phantom-agent envelope,
-    //    sign locally with the agent.
-    const agentKey = deriveAgentKey(
-      app.config.AGENT_MASTER_SEED as `0x${string}`,
-      auth.walletAddress,
-    );
-    const agentAccount = privateKeyToAccount(agentKey);
-    const nonce = Date.now();
-    const { typedData } = phantomAgentTypedData(action, nonce, {
-      isTestnet: app.config.isTestnet,
-    });
-    const sigHex = await agentAccount.signTypedData({
-      domain: typedData.domain,
-      types: typedData.types,
-      primaryType: typedData.primaryType,
-      message: typedData.message,
-    });
-    const signature = splitHexSig(sigHex);
+    // 5/6. Derive the user's agent key, sign the L1 phantom-agent envelope,
+    //      forward to HL. HL recovers the agent's address from the sig, looks
+    //      up the user via approveAgent records, processes the trade as
+    //      coming from the user.
+    const execute = async (): Promise<SendResponse> => {
+      const agentKey = deriveAgentKey(
+        app.config.AGENT_MASTER_SEED as `0x${string}`,
+        auth.walletAddress,
+      );
+      const agentAccount = privateKeyToAccount(agentKey);
+      const nonce = Date.now();
+      const { typedData } = phantomAgentTypedData(action, nonce, {
+        isTestnet: app.config.isTestnet,
+      });
+      const sigHex = await agentAccount.signTypedData({
+        domain: typedData.domain,
+        types: typedData.types,
+        primaryType: typedData.primaryType,
+        message: typedData.message,
+      });
+      const signature = splitHexSig(sigHex);
 
-    req.log.info(
-      {
-        type: action.type,
+      req.log.info(
+        {
+          type: action.type,
+          user: auth.walletAddress,
+          agent: agentAccount.address,
+          nonce,
+          idempotencyKey,
+        },
+        "agent_send",
+      );
+
+      let exchangeResponse: unknown;
+      try {
+        exchangeResponse = await hl.forwardExchange({
+          action: action as unknown,
+          nonce,
+          signature,
+        });
+      } catch (err) {
+        metrics.hlForwards.inc({ action: action.type, outcome: "error", path: "agent" });
+        throw err;
+      }
+      metrics.hlForwards.inc({ action: action.type, outcome: "ok", path: "agent" });
+      if (action.type === "order") {
+        recordOrderOutcome(exchangeResponse, action.builder?.f, "agent");
+      }
+
+      return {
+        success: true,
         user: auth.walletAddress,
-        agent: agentAccount.address,
-        nonce,
-      },
-      "agent_send",
-    );
-
-    // 6. Forward to HL. HL recovers the agent's address from the sig, looks
-    //    up the user via approveAgent records, processes the trade as
-    //    coming from the user.
-    const exchangeResponse = await hl.forwardExchange({
-      action: action as unknown,
-      nonce,
-      signature,
-    });
-
-    const out: SendResponse = {
-      success: true,
-      user: auth.walletAddress,
-      exchangeResponse,
+        exchangeResponse,
+      };
     };
+
+    let out: SendResponse;
+    if (idempotencyKey) {
+      const cacheKey = `${auth.walletAddress}:${idempotencyKey}`;
+      if (idempotentResponses.get(cacheKey) !== undefined) {
+        metrics.duplicatesRejected.inc({ route: "/agent/exchange" });
+        req.log.info({ idempotencyKey, user: auth.walletAddress }, "idempotent_replay_served");
+      }
+      // Failed executions self-evict (cachedAsync), so a retry after a real
+      // error re-executes instead of replaying the failure for 10 minutes.
+      out = await cachedAsync(idempotentResponses, cacheKey, execute);
+    } else {
+      out = await execute();
+    }
     return reply.send(out);
   });
 }

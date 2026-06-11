@@ -86,6 +86,12 @@ const ConfigSchema = z.object({
     .regex(/^[0-9a-fA-F]{32,}$/, "must be at least 16 bytes hex")
     .optional(),
   /**
+   * Bearer token guarding GET /metrics (Prometheus exposition — includes
+   * estimated fee revenue). Optional: unset leaves the endpoint open, which
+   * is fine locally but set it in production.
+   */
+  METRICS_TOKEN: z.string().min(16).optional(),
+  /**
    * Hard server-side cap on leverage when the agent path signs an
    * updateLeverage action. Users can still set higher leverage via /exchange
    * with their primary wallet signature. Default 10 — conservative for AI

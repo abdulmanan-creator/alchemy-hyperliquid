@@ -3,6 +3,7 @@ import type { FastifyInstance } from "fastify";
 import type { MarketsResponse, PerpAsset, SpotAsset } from "@alchemy-hl/shared";
 
 import { HlClient } from "../helpers/hlClient.js";
+import { TtlCache, cachedAsync } from "../helpers/ttlCache.js";
 
 /**
  * GET /markets — fan out to Hyperliquid's `meta` (perps) + `spotMeta` (spot),
@@ -26,42 +27,50 @@ export async function marketsRoute(app: FastifyInstance): Promise<void> {
     logger: { warn: app.log.warn.bind(app.log) },
   });
 
+  // Asset metadata (names, szDecimals, max leverage) changes on the order of
+  // listings, not requests — cache for 60s with in-flight coalescing so a
+  // burst of /markets traffic costs HL at most two info calls a minute.
+  const metaCache = new TtlCache<Promise<MarketsResponse>>({ ttlMs: 60_000, maxEntries: 4 });
+
   app.get("/markets", async (_req, reply) => {
-    const [meta, spotMeta] = await Promise.all([
-      hl.info<HlMeta>({ type: "meta" }),
-      hl.info<HlSpotMeta>({ type: "spotMeta" }),
-    ]);
-
-    const perps: PerpAsset[] = (meta.universe ?? []).map((u, i) => ({
-      name: u.name,
-      szDecimals: u.szDecimals ?? 0,
-      maxLeverage: u.maxLeverage ?? 1,
-      assetIndex: i,
-    }));
-
-    const tokens = spotMeta.tokens ?? [];
-    const spot: SpotAsset[] = (spotMeta.universe ?? []).map((u) => {
-      const base = tokens[u.tokens?.[0] ?? 0];
-      const quote = tokens[u.tokens?.[1] ?? 0];
-      return {
-        name: u.name,
-        base: base?.name ?? "?",
-        quote: quote?.name ?? "?",
-        assetIndex: 10000 + (u.index ?? 0),
-        szDecimals: base?.szDecimals ?? 0,
-      };
-    });
-
-    const out: MarketsResponse = {
-      perps,
-      spot,
-      // HIP-3 dexes live on /dexes; HIP-4 isn't enumerable yet.
-      hip3: [],
-      hip4: [],
-    };
-
+    const out = await cachedAsync(metaCache, "markets", () => fetchMarkets(hl));
     return reply.send(out);
   });
+}
+
+async function fetchMarkets(hl: HlClient): Promise<MarketsResponse> {
+  const [meta, spotMeta] = await Promise.all([
+    hl.info<HlMeta>({ type: "meta" }),
+    hl.info<HlSpotMeta>({ type: "spotMeta" }),
+  ]);
+
+  const perps: PerpAsset[] = (meta.universe ?? []).map((u, i) => ({
+    name: u.name,
+    szDecimals: u.szDecimals ?? 0,
+    maxLeverage: u.maxLeverage ?? 1,
+    assetIndex: i,
+  }));
+
+  const tokens = spotMeta.tokens ?? [];
+  const spot: SpotAsset[] = (spotMeta.universe ?? []).map((u) => {
+    const base = tokens[u.tokens?.[0] ?? 0];
+    const quote = tokens[u.tokens?.[1] ?? 0];
+    return {
+      name: u.name,
+      base: base?.name ?? "?",
+      quote: quote?.name ?? "?",
+      assetIndex: 10000 + (u.index ?? 0),
+      szDecimals: base?.szDecimals ?? 0,
+    };
+  });
+
+  return {
+    perps,
+    spot,
+    // HIP-3 dexes live on /dexes; HIP-4 isn't enumerable yet.
+    hip3: [],
+    hip4: [],
+  };
 }
 
 // ---- HL response shapes (subset of what they return) ------------------------

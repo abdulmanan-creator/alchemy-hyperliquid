@@ -79,10 +79,15 @@ const ConfigSchema = z.object({
     .optional(),
 });
 
-export type Config = Omit<z.infer<typeof ConfigSchema>, "PORT" | "MCP_PORT"> & {
+export type Config = Omit<
+  z.infer<typeof ConfigSchema>,
+  "PORT" | "MCP_PORT" | "MCP_PUBLIC_URL"
+> & {
   hasSigner: boolean;
   /** Effective HTTP port: PORT (host-injected) wins, falls back to MCP_PORT. */
   httpPort: number;
+  /** Always resolved by loadConfig (env value or localhost fallback). */
+  MCP_PUBLIC_URL: string;
 };
 
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {

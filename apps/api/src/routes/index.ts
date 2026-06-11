@@ -14,6 +14,7 @@ import { markPriceRoute } from "./markPrice.js";
 import { dexesRoute } from "./dexes.js";
 import { l2BookRoute } from "./l2Book.js";
 import { userFillsRoute } from "./userFills.js";
+import { metricsRoute } from "./metrics.js";
 
 export async function registerRoutes(app: FastifyInstance): Promise<void> {
   await app.register(exchangeRoute);
@@ -30,4 +31,5 @@ export async function registerRoutes(app: FastifyInstance): Promise<void> {
   await app.register(dexesRoute);
   await app.register(l2BookRoute);
   await app.register(userFillsRoute);
+  await app.register(metricsRoute);
 }

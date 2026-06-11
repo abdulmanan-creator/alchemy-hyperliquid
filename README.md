@@ -40,7 +40,18 @@ This boots:
 npm test
 ```
 
-Unit tests live under `apps/api/test/` (vitest). They cover builder-fee injection, signature recovery for L1 and EIP-712 actions, cap enforcement, and a mocked build→send roundtrip.
+Unit tests live under `apps/api/test/` (vitest). They cover builder-fee injection, signature recovery for L1 and EIP-712 actions, cap enforcement, replay/idempotency guards, metrics accounting, and a mocked build→send roundtrip.
+
+### Integration tests (real Hyperliquid testnet)
+
+```bash
+cd apps/api && npm run test:integration
+```
+
+Hits `api.hyperliquid-testnet.xyz` over the network — proves our wire shapes match HL's current API, which mocked unit tests can drift from. Two tiers:
+
+- **Read + build** — always runs, no keys needed.
+- **Signed roundtrip** (approveBuilderFee → resting order → openOrders → cancel) — runs only when `HL_TESTNET_PRIVATE_KEY` is set to a wallet funded on the [testnet faucet](https://app.hyperliquid-testnet.xyz/drip). The configured `ALCHEMY_BUILDER_ADDRESS` must also have a funded testnet account. Never use a mainnet key.
 
 ## Deploying to Render
 

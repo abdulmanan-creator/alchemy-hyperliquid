@@ -13,9 +13,10 @@
  * embedded wallet and use that address. If a user has only external wallets
  * linked, we fall back to the first wallet on the account.
  *
- * The verified-user lookup is uncached for now; Privy's verifyAuthToken is
- * an in-process JWT verification (~ms) and getUser is one HTTPS call. If
- * latency matters at scale we'd cache (jwt → user) with a short TTL.
+ * Verified lookups are cached (token → AuthenticatedUser, 60s TTL): Privy's
+ * verifyAuthToken is in-process (~ms) but getUser is an HTTPS roundtrip per
+ * request (~100ms) — without the cache every agent trade pays it. 60s is
+ * short enough that token expiry/unlink lags by at most a minute.
  */
 
 import { PrivyClient, type User } from "@privy-io/server-auth";
@@ -23,8 +24,14 @@ import { PrivyClient, type User } from "@privy-io/server-auth";
 import { ApiException } from "../errors.js";
 import type { Config } from "../config.js";
 import { verifyAccessToken } from "./oauthJwt.js";
+import { TtlCache, cachedAsync } from "./ttlCache.js";
 
 let cachedClient: PrivyClient | null = null;
+
+const privyUserCache = new TtlCache<Promise<AuthenticatedUser>>({
+  ttlMs: 60_000,
+  maxEntries: 5_000,
+});
 
 export interface AuthenticatedUser {
   /** Privy user id (if authed via Privy JWT). Absent for our OAuth tokens. */
@@ -128,7 +135,13 @@ export async function verifyPrivyAuth(
     }
   }
 
-  // 2. Privy JWT path.
+  // 2. Privy JWT path — cached per token so repeated agent calls within the
+  //    TTL skip the getUser network roundtrip. Failures aren't cached
+  //    (cachedAsync evicts rejected promises).
+  return cachedAsync(privyUserCache, token, () => verifyViaPrivy(token, cfg));
+}
+
+async function verifyViaPrivy(token: string, cfg: Config): Promise<AuthenticatedUser> {
   const client = getClient(cfg);
 
   let claims;

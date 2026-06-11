@@ -19,6 +19,8 @@ import {
 import { deriveAgentAddress, AGENT_NAME } from "../helpers/agent.js";
 import { recoverActionSigner } from "../helpers/verify.js";
 import { HlClient } from "../helpers/hlClient.js";
+import { metrics, recordOrderOutcome } from "../helpers/metrics.js";
+import { TtlCache } from "../helpers/ttlCache.js";
 
 /**
  * POST /exchange — single dispatch endpoint.
@@ -41,7 +43,15 @@ export async function exchangeRoute(app: FastifyInstance): Promise<void> {
     logger: { warn: app.log.warn.bind(app.log) },
   });
 
-  app.post("/exchange", async (req, reply) => {
+  // Replay guard for Phase B. A signature is unique to one signed payload, so
+  // seeing the same (r,s,v,nonce) twice within the window means a client
+  // retry of an already-forwarded action — reject instead of resubmitting to
+  // HL (where it would either double-place or die with an opaque duplicate-
+  // nonce error). 10-minute TTL comfortably covers retry storms; HL's own
+  // per-address nonce tracking is the backstop beyond that.
+  const seenSignatures = new TtlCache<true>({ ttlMs: 10 * 60_000, maxEntries: 50_000 });
+
+  app.post("/exchange", { config: { rateLimit: WRITE_RATE_LIMIT } }, async (req, reply) => {
     let body: ExchangeBody;
     try {
       body = ExchangeBodySchema.parse(req.body);
@@ -65,6 +75,16 @@ export async function exchangeRoute(app: FastifyInstance): Promise<void> {
       if (body.action.type === "order") {
         injectBuilder(body.action, app.config);
         builderFee = body.action.builder?.f;
+      }
+
+      const replayKey = `${body.signature.r}:${body.signature.s}:${body.signature.v}:${body.nonce}`;
+      if (!seenSignatures.addIfAbsent(replayKey, true)) {
+        metrics.duplicatesRejected.inc({ route: "/exchange" });
+        throw new ApiException(
+          "DUPLICATE_REQUEST",
+          "This signed payload was already submitted.",
+          "The same signature + nonce was forwarded within the last 10 minutes — the original request likely succeeded. Check order state via /openOrders or /orderStatus instead of retrying. To place the same order again, build and sign a fresh payload.",
+        );
       }
 
       const signer = await recoverActionSigner(
@@ -101,11 +121,27 @@ export async function exchangeRoute(app: FastifyInstance): Promise<void> {
         "forwarding_to_hl",
       );
 
-      const exchangeResponse = await hl.forwardExchange({
-        action: body.action as unknown,
-        nonce: body.nonce,
-        signature: normalizedSignature,
-      });
+      let exchangeResponse: unknown;
+      try {
+        exchangeResponse = await hl.forwardExchange({
+          action: body.action as unknown,
+          nonce: body.nonce,
+          signature: normalizedSignature,
+        });
+      } catch (err) {
+        // The payload never reached HL — clear the replay guard so the
+        // client can legitimately retry the same signed payload. Rejections
+        // (HL saw it and said no) stay guarded.
+        if (err instanceof ApiException && err.code === "HL_EXCHANGE_UNREACHABLE") {
+          seenSignatures.delete(replayKey);
+        }
+        metrics.hlForwards.inc({ action: body.action.type, outcome: "error", path: "user" });
+        throw err;
+      }
+      metrics.hlForwards.inc({ action: body.action.type, outcome: "ok", path: "user" });
+      if (body.action.type === "order") {
+        recordOrderOutcome(exchangeResponse, builderFee, "user");
+      }
 
       const out: SendResponse = {
         success: true,
@@ -136,6 +172,14 @@ export async function exchangeRoute(app: FastifyInstance): Promise<void> {
  * cancel / cancelByCloid don't reference the builder address so they pass.
  */
 const ZERO_ADDR = /^0x0+$/i;
+
+/**
+ * Tighter per-route bucket for the write path (the global limit in server.ts
+ * covers reads). Forwarding to HL is the expensive, irreversible operation —
+ * 10 signed submissions per second per IP is far above any human flow and
+ * still generous for bots.
+ */
+export const WRITE_RATE_LIMIT = { max: 10, timeWindow: "1 second" } as const;
 
 function buildPhase(
   action: Action,
