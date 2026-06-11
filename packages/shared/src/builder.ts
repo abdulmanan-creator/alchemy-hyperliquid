@@ -18,6 +18,69 @@ export interface BalanceState {
 }
 
 /**
+ * One open perp position, shaped from HL clearinghouseState.assetPositions.
+ * String-typed numerics mirror HL's wire format (avoids float drift; render
+ * layers format as needed).
+ */
+export interface PerpPosition {
+  coin: string;
+  /** Absolute position size in coin units (HL's szi is signed; we split sign into `side`). */
+  size: string;
+  side: "long" | "short";
+  entryPx: string;
+  /** Current USD value of the position. */
+  positionValue: string;
+  unrealizedPnl: string;
+  /** Fractional return on equity, e.g. "0.05" = +5%. */
+  returnOnEquity: string;
+  /** Null when there's no liquidation price (e.g. fully collateralized). */
+  liquidationPx: string | null;
+  leverage: number;
+  leverageMode: "cross" | "isolated";
+  marginUsed: string;
+}
+
+/** Response from GET /positions?user=0x... */
+export interface PositionsResponse {
+  user: `0x${string}`;
+  positions: PerpPosition[];
+}
+
+/**
+ * One resting order, as returned by POST /openOrders. `cancelAction` is the
+ * exact action to feed back into /exchange (or /agent/exchange) to cancel it.
+ */
+export interface OpenOrder {
+  oid: number;
+  assetIndex: number;
+  side: "buy" | "sell";
+  limitPx: string;
+  /** Remaining size. */
+  sz: string;
+  /** Original size at placement. */
+  origSz: string;
+  timestamp: number;
+  cancelAction: import("./action.js").CancelAction;
+}
+
+/** Response from POST /openOrders { user }. */
+export interface OpenOrdersResponse {
+  user: `0x${string}`;
+  orders: OpenOrder[];
+}
+
+/** Response from GET /agent?user=0x... — the user's derived agent wallet. */
+export interface AgentState {
+  user: `0x${string}`;
+  agentAddress: `0x${string}`;
+  agentName: string;
+  /** True iff this agent is registered in HL's extraAgents for the user. */
+  approved: boolean;
+  /** HL expiry timestamp (ms) for the delegation, when known. */
+  validUntil: number | null;
+}
+
+/**
  * Approval-state response from GET /approval?user=0x...
  *
  * Maps Hyperliquid's `maxBuilderFee` raw int into something the UI can render.

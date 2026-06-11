@@ -9,6 +9,7 @@
 
 import type {
   Action,
+  AgentState,
   ApiError,
   ApprovalState,
   BalanceState,
@@ -16,22 +17,31 @@ import type {
   BuildResponse,
   DexesResponse,
   MarketsResponse,
+  OpenOrdersResponse,
+  PositionsResponse,
   SendRequest,
   SendResponse,
   Signature,
+  UserFillsResponse,
 } from "@alchemy-hl/shared";
 
 export type {
   Action,
+  AgentState,
   ApiError,
   ApprovalState,
   BalanceState,
   BuildResponse,
   DexesResponse,
   MarketsResponse,
+  OpenOrdersResponse,
+  PositionsResponse,
   SendResponse,
   Signature,
+  UserFillsResponse,
 };
+export type { OpenOrder, PerpPosition } from "@alchemy-hl/shared";
+export type { UserFill } from "@alchemy-hl/shared";
 
 export interface ClientOptions {
   /** Base URL of the Alchemy Hyperliquid API. */
@@ -87,6 +97,32 @@ export class AlchemyHyperliquid {
 
   dexes(): Promise<DexesResponse> {
     return this.request<DexesResponse>("GET", "/dexes");
+  }
+
+  /** Open perp positions with per-position PnL. */
+  positions(user: `0x${string}`): Promise<PositionsResponse> {
+    return this.request<PositionsResponse>(
+      "GET",
+      `/positions?user=${encodeURIComponent(user)}`,
+    );
+  }
+
+  /** Resting orders, each with a ready-to-sign cancelAction. */
+  openOrders(user: `0x${string}`): Promise<OpenOrdersResponse> {
+    return this.request<OpenOrdersResponse>("POST", "/openOrders", { user });
+  }
+
+  /** Recent fills, newest first. */
+  userFills(user: `0x${string}`, limit = 20): Promise<UserFillsResponse> {
+    return this.request<UserFillsResponse>(
+      "GET",
+      `/userFills?user=${encodeURIComponent(user)}&limit=${limit}`,
+    );
+  }
+
+  /** The user's derived agent wallet + whether it's approved on HL. */
+  agent(user: `0x${string}`): Promise<AgentState> {
+    return this.request<AgentState>("GET", `/agent?user=${encodeURIComponent(user)}`);
   }
 
   private async request<T>(method: string, path: string, body?: unknown): Promise<T> {

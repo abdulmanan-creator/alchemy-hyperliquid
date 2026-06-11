@@ -13,6 +13,7 @@ export function Nav() {
           <span className="nav-sub">Hyperliquid</span>
         </Link>
         <div className="nav-links">
+          <Link className="nav-link" href="/dashboard">Dashboard</Link>
           <a className="nav-link" href="#quickstart">Docs</a>
           <a className="nav-link" href="#ai">AI</a>
           <a className="nav-link active" href="#api">API</a>
