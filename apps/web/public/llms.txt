@@ -16,6 +16,8 @@ Key facts:
 - GET /l2Book?coin={symbol} — order-book snapshot
 - GET /balance?user={address} — account value, withdrawable, margin used
 - GET /positions?user={address} — open perp positions with per-position PnL
+- GET /outcomes — HIP-4 prediction markets (outcome ids, side names, asset ids)
+- GET /outcomeOdds?outcome={id} — live implied probabilities from book midpoints
 - GET /approval?user={address} — builder-fee approval state
 - GET /userFills?user={address} — recent fills
 - POST /exchange — two-phase build → sign → send for orders, cancels, leverage, approvals
@@ -24,7 +26,7 @@ Key facts:
 
 ## AI Connectors (MCP)
 
-- [MCP server](https://alchemy-hl-mcp.onrender.com): streamable-HTTP MCP server with OAuth; 14 tools — get_markets, get_market_price, get_balance, get_positions, get_open_orders, get_fills, get_approval, place_market_order, place_limit_order, place_trigger_order (TP/SL), close_position, cancel_order, set_leverage, approve_builder
+- [MCP server](https://alchemy-hl-mcp.onrender.com): streamable-HTTP MCP server with OAuth; 17 tools — get_markets, get_market_price, get_balance, get_positions, get_open_orders, get_fills, get_approval, get_prediction_markets, get_prediction_odds, place_market_order, place_limit_order, place_trigger_order (TP/SL), trade_prediction_market, close_position, cancel_order, set_leverage, approve_builder
 - [Claude setup](https://alchemy-hl-web.onrender.com/connect/claude): add the MCP URL as a custom connector
 - [ChatGPT setup](https://alchemy-hl-web.onrender.com/connect/chatgpt): register the same server via ChatGPT Apps
 

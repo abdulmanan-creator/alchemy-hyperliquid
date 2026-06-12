@@ -37,7 +37,14 @@
  * ```
  */
 
-export { Alchemy, type ClientOptions, type OrderResult, type TriggerOpts } from "./client.js";
+export {
+  Alchemy,
+  type CancelItem,
+  type ClientOptions,
+  type OrderResult,
+  type OutcomeOrderParams,
+  type TriggerOpts,
+} from "./client.js";
 export { AlchemyHlError, SdkInputError } from "./errors.js";
 export type { ApiError, ErrorCode } from "./errors.js";
 export type { Signer, SignerConfig, SignTypedDataParams } from "./signer.js";
@@ -59,6 +66,10 @@ export type {
   BuildResponse,
   DexesResponse,
   MarketsResponse,
+  OutcomeMarket,
+  OutcomeOddsResponse,
+  OutcomesResponse,
+  OutcomeSide,
   PerpPosition,
   PositionsResponse,
   SendResponse,

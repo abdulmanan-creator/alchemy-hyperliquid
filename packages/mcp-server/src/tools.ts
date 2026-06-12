@@ -290,9 +290,134 @@ export function buildTools(cfg: Config): Tool[] {
       },
     },
 
+    {
+      name: "get_prediction_markets",
+      description:
+        "List HIP-4 outcome (prediction) markets currently live on Hyperliquid — e.g. Fed rate decisions, sports championships, election outcomes. Each market has two named sides (not always Yes/No — could be 'Change'/'No Change' or team names) and an `outcome` id used by get_prediction_odds and trade_prediction_market. Descriptions are truncated here; get_prediction_odds returns the full resolution criteria.",
+      inputSchema: z.object({
+        search: z
+          .string()
+          .optional()
+          .describe("Case-insensitive substring filter on market names (e.g. 'Fed', 'NBA')."),
+        limit: z.number().int().positive().max(200).default(50),
+      }),
+      async handler(rawArgs) {
+        const args = z
+          .object({ search: z.string().optional(), limit: z.number().int().positive().max(200).default(50) })
+          .parse(rawArgs ?? {});
+        const { outcomes } = await readSdk.outcomes();
+        const needle = args.search?.toLowerCase();
+        const filtered = needle
+          ? outcomes.filter((o) => o.name.toLowerCase().includes(needle))
+          : outcomes;
+        return JSON.stringify(
+          {
+            total: filtered.length,
+            markets: filtered.slice(0, args.limit).map((o) => ({
+              outcome: o.outcome,
+              name: o.name,
+              sides: o.sides.map((s) => ({ side: s.side, name: s.name })),
+              quoteToken: o.quoteToken,
+              description:
+                o.description.length > 160 ? `${o.description.slice(0, 160)}…` : o.description,
+            })),
+          },
+          null,
+          2,
+        );
+      },
+    },
+
+    {
+      name: "get_prediction_odds",
+      description:
+        "Live implied probabilities for one prediction market, derived from its order-book midpoints, plus the full resolution criteria. `probability` is 0–1 (0.25 = market prices a 25% chance); null means an empty book. Use the per-side bestBid/bestAsk to choose a realistic limit price before trading.",
+      inputSchema: z.object({
+        outcome: z.number().int().min(0).describe("Outcome id from get_prediction_markets."),
+      }),
+      async handler(rawArgs) {
+        const { outcome } = z.object({ outcome: z.number().int().min(0) }).parse(rawArgs);
+        const [odds, { outcomes }] = await Promise.all([
+          readSdk.outcomeOdds(outcome),
+          readSdk.outcomes(),
+        ]);
+        const meta = outcomes.find((o) => o.outcome === outcome);
+        return JSON.stringify(
+          { ...odds, resolutionCriteria: meta?.description ?? null },
+          null,
+          2,
+        );
+      },
+    },
+
     // ========================================================================
     // Write tools — require ALCHEMY_HL_TRADE_KEY
     // ========================================================================
+
+    {
+      name: "trade_prediction_market",
+      description:
+        "Place a limit order on a HIP-4 prediction market. `price` IS the implied probability (exclusive 0–1): buying 25 contracts of a side at price 0.30 costs 7.50 quote tokens and pays 25 if that side wins, 0 otherwise. Sizes are whole contracts. Check get_prediction_odds first and price near the book (a buy far above bestAsk overpays; far below never fills). Selling contracts you hold exits the position early at the current market-implied probability.",
+      inputSchema: z.object({
+        outcome: z.number().int().min(0).describe("Outcome id from get_prediction_markets."),
+        side: z
+          .union([z.literal(0), z.literal(1)])
+          .describe("Which side of the market (0 or 1 — names per get_prediction_markets)."),
+        action: z.enum(["buy", "sell"]),
+        contracts: z.number().int().positive().describe("Whole contracts; each pays 1 quote token if the side wins."),
+        price: z
+          .number()
+          .gt(0)
+          .lt(1)
+          .describe("Limit price as a probability, e.g. 0.25 = 25%."),
+        tif: z.enum(["Gtc", "Ioc", "Alo"]).default("Gtc"),
+      }),
+      async handler(rawArgs, auth) {
+        const lock = requireSigner("trade_prediction_market", auth);
+        if (lock) return lock;
+        const args = z
+          .object({
+            outcome: z.number().int().min(0),
+            side: z.union([z.literal(0), z.literal(1)]),
+            action: z.enum(["buy", "sell"]),
+            contracts: z.number().int().positive(),
+            price: z.number().gt(0).lt(1),
+            tif: z.enum(["Gtc", "Ioc", "Alo"]).default("Gtc"),
+          })
+          .parse(rawArgs);
+        const sdk = sdkForWrite(auth)!;
+        try {
+          const result = await sdk.outcomeOrder({
+            outcome: args.outcome,
+            side: args.side,
+            action: args.action,
+            contracts: args.contracts,
+            price: args.price,
+            tif: args.tif,
+          });
+          if (result.error) {
+            return JSON.stringify({ ok: false, error: result.error }, null, 2);
+          }
+          return JSON.stringify(
+            {
+              ok: true,
+              filled: result.filled,
+              filledContracts: result.filledSize,
+              avgPrice: result.avgPrice,
+              oid: result.oid,
+              restingOid: result.restingOid,
+              maxPayout: args.contracts, // quote tokens if the side wins
+              cost: +(args.contracts * args.price).toFixed(4),
+              user: result.user,
+            },
+            null,
+            2,
+          );
+        } catch (err) {
+          return errToMessage(err);
+        }
+      },
+    },
 
     {
       name: "close_position",
@@ -504,20 +629,36 @@ export function buildTools(cfg: Config): Tool[] {
     {
       name: "cancel_order",
       description:
-        "Cancel an existing open order by its order id (oid) and symbol. Idempotent — cancelling an already-filled or cancelled order returns a status, not an error.",
+        "Cancel an existing open order by its order id (oid). Identify the market by `symbol` (perps/spot like 'BTC') OR `assetId` (for prediction-market orders, the side's assetId from get_prediction_markets). Idempotent — cancelling an already-filled or cancelled order returns a status, not an error.",
       inputSchema: z.object({
-        symbol: z.string(),
+        symbol: z.string().optional().describe("Perp/spot symbol like 'BTC'. Use assetId for prediction markets."),
+        assetId: z.number().int().min(0).optional().describe("Raw asset id — required for prediction-market orders."),
         oid: z.number().int().positive(),
       }),
       async handler(rawArgs, auth) {
         const lock = requireSigner("cancel_order", auth);
         if (lock) return lock;
         const args = z
-          .object({ symbol: z.string(), oid: z.number().int().positive() })
+          .object({
+            symbol: z.string().optional(),
+            assetId: z.number().int().min(0).optional(),
+            oid: z.number().int().positive(),
+          })
           .parse(rawArgs);
+        if (!args.symbol && args.assetId === undefined) {
+          return JSON.stringify(
+            { ok: false, error: "Pass either `symbol` or `assetId` to identify the market." },
+            null,
+            2,
+          );
+        }
         const sdk = sdkForWrite(auth)!;
         try {
-          const result = await sdk.cancel({ symbol: args.symbol, oid: args.oid });
+          const result = await sdk.cancel(
+            args.assetId !== undefined
+              ? { assetId: args.assetId, oid: args.oid }
+              : { symbol: args.symbol!, oid: args.oid },
+          );
           // cancel returns SendResponse (no per-order fill data to parse).
           return JSON.stringify(
             { ok: result.success, user: result.user, exchangeResponse: result.exchangeResponse },

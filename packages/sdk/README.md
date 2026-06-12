@@ -47,6 +47,19 @@ await sdk.closePosition("BTC", { size: 0.001 });          // partial close
 
 `takeProfit` / `stopLoss` are reduce-only by default and derive direction + size from the open position; pass `side` / `size` to override. Trigger orders rest until the mark price crosses `triggerPrice` — cancel them like any order via the returned `restingOid`.
 
+### Prediction markets (HIP-4)
+
+```ts
+const { outcomes } = await sdk.outcomes();               // live outcome markets
+const odds = await sdk.outcomeOdds(104);                 // implied probabilities
+await sdk.outcomeOrder({                                 // 25 contracts @ 30%
+  outcome: 104, side: 0, action: "buy", contracts: 25, price: 0.30,
+});
+await sdk.cancel({ assetId: odds.sides[0].assetId, oid: 123 }); // outcomes have no symbol
+```
+
+Prices are probabilities (exclusive 0–1); each contract settles to 1 quote token if its side wins, 0 otherwise. Sizes are whole contracts. Selling contracts you hold exits early at the market's current implied probability.
+
 ### Reads
 
 ```ts

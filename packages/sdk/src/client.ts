@@ -22,6 +22,8 @@ import type {
   BuildResponse,
   DexesResponse,
   MarketsResponse,
+  OutcomeOddsResponse,
+  OutcomesResponse,
   PerpPosition,
   PositionsResponse,
   SendResponse,
@@ -195,6 +197,16 @@ export class Alchemy {
     return this.assets.resolve(symbol);
   }
 
+  /** HIP-4 outcome (prediction) markets currently listed on Hyperliquid. */
+  outcomes(): Promise<OutcomesResponse> {
+    return this.get<OutcomesResponse>("/outcomes");
+  }
+
+  /** Live implied probabilities for one outcome market (book midpoints). */
+  outcomeOdds(outcome: number): Promise<OutcomeOddsResponse> {
+    return this.get<OutcomeOddsResponse>(`/outcomeOdds?outcome=${outcome}`);
+  }
+
   // ==========================================================================
   // Trading primitives — sign + send
   // ==========================================================================
@@ -251,15 +263,20 @@ export class Alchemy {
     return this.marketOrder({ ...opts, symbol, side: "sell" });
   }
 
-  /** Cancel one or more open orders by oid. */
+  /**
+   * Cancel one or more open orders by oid. Identify the asset by `symbol`
+   * (perps/spot) or raw `assetId` (anything, incl. HIP-4 outcome assets
+   * which have no symbol).
+   */
   async cancel(
-    items: { symbol: string; oid: number }[] | { symbol: string; oid: number },
+    items: CancelItem[] | CancelItem,
     opts: { idempotencyKey?: string } = {},
   ): Promise<SendResponse> {
     const arr = Array.isArray(items) ? items : [items];
     const resolved = await Promise.all(
       arr.map(async (i) => ({
-        assetIndex: (await this.assets.resolve(i.symbol)).assetIndex,
+        assetIndex:
+          "assetId" in i ? i.assetId : (await this.assets.resolve(i.symbol)).assetIndex,
         oid: i.oid,
       })),
     );
@@ -374,6 +391,46 @@ export class Alchemy {
     opts: TriggerOpts,
   ): Promise<OrderResult> {
     return this.triggerOrder(symbol, "sl", opts);
+  }
+
+  /**
+   * Place a limit order on a HIP-4 outcome (prediction) market.
+   *
+   * Price IS the probability (exclusive 0–1): buying side 0 at 0.25 costs
+   * 0.25 quote tokens per contract and pays 1 if that side wins. Sizes are
+   * whole contracts. Builder fees apply spot-style.
+   *
+   * @example
+   *   // 25 contracts of outcome 104's side 0 at 25% implied probability
+   *   sdk.outcomeOrder({ outcome: 104, side: 0, action: "buy", contracts: 25, price: 0.25 });
+   */
+  async outcomeOrder(p: OutcomeOrderParams): Promise<OrderResult> {
+    const price = Number(p.price);
+    if (!Number.isFinite(price) || price <= 0 || price >= 1) {
+      throw new SdkInputError(
+        `Outcome prices are probabilities — \`price\` must be between 0 and 1 exclusive, got: ${p.price}`,
+      );
+    }
+    const contracts = Number(p.contracts);
+    if (!Number.isInteger(contracts) || contracts <= 0) {
+      throw new SdkInputError(
+        `Outcome sizes are whole contracts — \`contracts\` must be a positive integer, got: ${p.contracts}`,
+      );
+    }
+    const encoding = 10 * p.outcome + p.side;
+    const action = buildLimitOrder({
+      assetIndex: 100_000_000 + encoding,
+      szDecimals: 0, // whole contracts
+      isSpot: true, // spot-style precision + builder fee classification
+      side: p.action,
+      size: contracts,
+      price,
+      tif: p.tif ?? "Gtc",
+      reduceOnly: false,
+      cloid: p.cloid,
+    });
+    const sent = await this.signAndSend(action, p.idempotencyKey);
+    return parseOrderResult(sent);
   }
 
   // ==========================================================================
@@ -577,6 +634,28 @@ export class Alchemy {
   private requireSignerAddress(): `0x${string}` {
     return this.requireSigner().address;
   }
+}
+
+/** One order to cancel — by symbol (perps/spot) or raw asset id (outcomes). */
+export type CancelItem =
+  | { symbol: string; oid: number }
+  | { assetId: number; oid: number };
+
+/** Params for {@link Alchemy.outcomeOrder} — HIP-4 prediction markets. */
+export interface OutcomeOrderParams {
+  /** Outcome id from sdk.outcomes(). */
+  outcome: number;
+  /** Which side of the market (names are per-market, see sides[].name). */
+  side: 0 | 1;
+  action: "buy" | "sell";
+  /** Whole contracts; each pays 1 quote token if the side wins. */
+  contracts: number | string;
+  /** Implied probability, exclusive (0, 1) — e.g. 0.25 = 25%. */
+  price: number | string;
+  tif?: "Alo" | "Gtc" | "Ioc";
+  cloid?: `0x${string}`;
+  /** Agent-mode dedupe key — see /agent/exchange idempotency. */
+  idempotencyKey?: string;
 }
 
 /** Options shared by takeProfit / stopLoss. */

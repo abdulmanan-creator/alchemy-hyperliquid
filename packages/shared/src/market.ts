@@ -127,3 +127,56 @@ export interface UserFillsResponse {
   user: `0x${string}`;
   fills: UserFill[];
 }
+
+// ---- HIP-4 outcome (prediction) markets -------------------------------------
+
+/**
+ * One side of an outcome market. HL encodes each side as its own asset:
+ *   encoding = 10 * outcome + side          (side is 0 or 1)
+ *   assetId  = 100_000_000 + encoding       (for order placement)
+ *   coin     = "#" + encoding               (for l2Book / order-by-coin)
+ * Prices on these assets ARE probabilities (0.001–0.999); a winning contract
+ * settles to 1 quote token, a losing one to 0.
+ */
+export interface OutcomeSide {
+  side: 0 | 1;
+  /** Per-market side label from HL's sideSpecs (e.g. "Yes", "Change", "San Antonio"). */
+  name: string;
+  assetId: number;
+  coin: string;
+}
+
+/** One HIP-4 outcome market from HL's `outcomeMeta`. */
+export interface OutcomeMarket {
+  /** HL's outcome id — the stable handle for this market. */
+  outcome: number;
+  name: string;
+  /** Full resolution criteria — load-bearing for deciding what to trade. */
+  description: string;
+  sides: [OutcomeSide, OutcomeSide];
+  quoteToken: string;
+}
+
+/** Response from GET /outcomes. */
+export interface OutcomesResponse {
+  outcomes: OutcomeMarket[];
+}
+
+/** Live odds for one side, derived from its order book. */
+export interface OutcomeSideOdds extends OutcomeSide {
+  bestBid: string | null;
+  bestAsk: string | null;
+  /**
+   * Book midpoint = implied probability (0–1) of this side winning.
+   * Null when the book is empty.
+   */
+  probability: number | null;
+}
+
+/** Response from GET /outcomeOdds?outcome=N. */
+export interface OutcomeOddsResponse {
+  outcome: number;
+  name: string;
+  quoteToken: string;
+  sides: [OutcomeSideOdds, OutcomeSideOdds];
+}

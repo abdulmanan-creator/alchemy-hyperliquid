@@ -1,4 +1,4 @@
-# Acceptance test plan — phases 1–4
+# Acceptance test plan — phases 1–5
 
 Run top to bottom after all three Render services are serving the latest commit.
 Each item lists the step and the expected result. Items marked **[$]** move real
@@ -124,7 +124,26 @@ Revenue:
 - [ ] Bad token: `curl -H "Authorization: Bearer garbage" https://alchemy-hl-mcp.onrender.com/` (POST an MCP frame)
       → 401 with `error="invalid_token"` in WWW-Authenticate.
 
-## 7. Token expiry (passive, day 2)
+## 7. Prediction markets — HIP-4 (10 min) [$ small]
+
+- [ ] `curl https://alchemy-hl-api.onrender.com/outcomes` → live outcome
+      markets (Fed decisions, sports, …) with sides + assetIds.
+- [ ] `curl "https://alchemy-hl-api.onrender.com/outcomeOdds?outcome=<id>"`
+      → per-side bestBid/bestAsk + probability (book midpoint).
+- [ ] In Claude: "What prediction markets are live on Hyperliquid?" →
+      get_prediction_markets. Then "What are the odds on the Fed market?"
+      → get_prediction_odds with resolution criteria.
+- [ ] "Buy 10 contracts of <side> at <near the book price>" →
+      trade_prediction_market; order rests or fills; cost = contracts × price.
+- [ ] "Cancel that prediction order" → cancel_order with assetId (no symbol).
+- [ ] SDK: `sdk.outcomes()`, `sdk.outcomeOdds(id)`, and an
+      `sdk.outcomeOrder(…)` at a far-from-book price, then
+      `sdk.cancel({ assetId, oid })`.
+- [ ] Note: outcome positions live in HL's *spot* balances (not
+      /positions). Verifying holdings requires HL's UI/API for now —
+      dashboard surfacing is future work.
+
+## 8. Token expiry (passive, day 2)
 
 - [ ] ~24h after connecting, use the Claude connector again → it should
       silently re-run OAuth (one redirect) rather than erroring. This
