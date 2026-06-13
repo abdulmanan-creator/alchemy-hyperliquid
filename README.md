@@ -1,4 +1,15 @@
-# Alchemy Hyperliquid
+# Alchemy Hyperliquid — Builder API
+
+> **Scope:** This repo is the **builder-codes product, Hyperliquid-only** — a
+> developer/agent-facing REST API + SDK + MCP server that routes signed orders
+> into Hyperliquid with our builder code attached. It is deliberately
+> single-venue.
+>
+> The **multi-venue trading platform** (a liquid.trade competitor — Hyperliquid
+> + Lighter + Ostium behind one trading UI) lives in a separate repo,
+> `perps-platform`, which was forked from this one and reuses this Hyperliquid
+> engine as its first venue adapter. Keep venue-agnostic/aggregation work there;
+> keep Hyperliquid builder-code work here.
 
 A zero-custody REST builder API for trading on Hyperliquid. The user's private key never leaves their machine — our backend builds the action, the client signs it locally, and we forward the signed payload to Hyperliquid's `/exchange` endpoint with Alchemy's builder code attached. We earn the builder fee on every routed trade.
 
