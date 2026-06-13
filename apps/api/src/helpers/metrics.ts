@@ -71,6 +71,10 @@ export const metrics = {
     "alchemy_duplicate_requests_total",
     "Requests rejected by replay/idempotency guards, by route.",
   ),
+  geoBlocked: new Counter(
+    "alchemy_geo_blocked_total",
+    "Requests rejected by jurisdiction gating, by country and reason.",
+  ),
 
   expose(): string {
     return (
@@ -81,6 +85,7 @@ export const metrics = {
         this.filledNotionalUsd,
         this.builderFeeUsd,
         this.duplicatesRejected,
+        this.geoBlocked,
       ]
         .map((c) => c.expose())
         .join("\n\n") + "\n"

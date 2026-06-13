@@ -98,6 +98,42 @@ const ConfigSchema = z.object({
    * agents acting unattended. Raise if your traders need more headroom.
    */
   MAX_AGENT_LEVERAGE_PERPS: z.coerce.number().int().min(1).max(50).default(10),
+  /**
+   * Geo-restriction master switch. When true (default), requests originating
+   * from a restricted jurisdiction are rejected with REGION_BLOCKED (HTTP 451)
+   * before they reach any trading route. Set to "false" only for local dev or
+   * a jurisdiction-neutral deployment you've cleared with counsel.
+   */
+  GEO_BLOCK_ENABLED: z
+    .enum(["true", "false"])
+    .default("true")
+    .transform((v) => v === "true"),
+  /**
+   * Comma-separated ISO 3166-1 alpha-2 country codes to block. Defaults to the
+   * US plus the OFAC-embargoed set, mirroring the venues we route into
+   * (Hyperliquid restricts the same list). Cloudflare's CF-IPCountry is
+   * country-granular only, so subdivision bans (e.g. Ontario, CA-ON) can't be
+   * enforced here — handle those at the CF WAF / edge if required.
+   */
+  RESTRICTED_COUNTRIES: z
+    .string()
+    .default("US,CU,IR,KP,SY,RU"),
+  /**
+   * Header carrying the client's resolved country. Default is Cloudflare's
+   * `cf-ipcountry` (CF sits in front of the relay). Override for other edges
+   * (e.g. `x-vercel-ip-country`, `fly-client-country`).
+   */
+  GEO_COUNTRY_HEADER: z.string().default("cf-ipcountry"),
+  /**
+   * When true, requests whose country cannot be determined (header missing or
+   * "XX"/unknown — e.g. someone hitting the Render origin directly, bypassing
+   * Cloudflare) are blocked rather than allowed. Recommended `true` in prod;
+   * defaults `false` so local dev and health checks aren't blackholed.
+   */
+  GEO_FAIL_CLOSED: z
+    .enum(["true", "false"])
+    .default("false")
+    .transform((v) => v === "true"),
 });
 
 export type Config = Omit<
@@ -109,6 +145,8 @@ export type Config = Omit<
   builderAddressLower: string;
   /** True iff HYPERLIQUID_API_URL points at testnet (best-effort heuristic). */
   isTestnet: boolean;
+  /** Parsed RESTRICTED_COUNTRIES as an uppercased Set for O(1) lookups. */
+  restrictedCountries: ReadonlySet<string>;
 };
 
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
@@ -131,11 +169,18 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
   // address shape (length + hex).
   const checksummed = getAddress(parsed.ALCHEMY_BUILDER_ADDRESS);
 
+  const restrictedCountries = new Set(
+    parsed.RESTRICTED_COUNTRIES.split(",")
+      .map((c) => c.trim().toUpperCase())
+      .filter((c) => c.length > 0),
+  );
+
   return {
     ...parsed,
     ALCHEMY_BUILDER_ADDRESS: checksummed,
     builderAddressLower: checksummed.toLowerCase(),
     isTestnet: parsed.HYPERLIQUID_API_URL.includes("testnet"),
+    restrictedCountries,
     WEB_ORIGIN: normalizeOrigins(parsed.WEB_ORIGIN),
   };
 }

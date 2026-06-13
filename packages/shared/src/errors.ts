@@ -18,6 +18,7 @@ export const ERROR_CODES = [
   "NEEDS_DEPOSIT",
   "DUPLICATE_REQUEST",
   "RATE_LIMITED",
+  "REGION_BLOCKED",
   "INTERNAL_ERROR",
 ] as const;
 
@@ -40,5 +41,8 @@ export const HTTP_STATUS_FOR_CODE: Record<ErrorCode, number> = {
   NEEDS_DEPOSIT: 422,
   DUPLICATE_REQUEST: 409,
   RATE_LIMITED: 429,
+  // 451 Unavailable For Legal Reasons — the caller's jurisdiction is on the
+  // restricted list (US + sanctioned regions). See helpers/geo.ts.
+  REGION_BLOCKED: 451,
   INTERNAL_ERROR: 500,
 };

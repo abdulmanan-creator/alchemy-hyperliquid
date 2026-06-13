@@ -9,6 +9,7 @@ import rateLimit from "@fastify/rate-limit";
 
 import { loadConfig } from "./config.js";
 import { ApiException, sendError } from "./errors.js";
+import { geoDecision } from "./helpers/geo.js";
 import { metrics } from "./helpers/metrics.js";
 import { registerRoutes } from "./routes/index.js";
 
@@ -82,6 +83,34 @@ await app.register(rateLimit, {
   // Per-IP. Behind Render's proxy `trustProxy: true` gets us the real client IP.
   // Write paths (/exchange, /agent/exchange) carry their own tighter bucket —
   // see WRITE_RATE_LIMIT in routes/exchange.ts.
+});
+
+// Jurisdiction gate. Runs before any route handler so a restricted caller
+// never reaches a trading surface (the relay forwards signed orders, so this
+// is the load-bearing block — the web UI gate is UX only). Operational
+// endpoints stay open: /healthz and /metrics are hit by monitoring from
+// uncountried networks and must not be geo-blocked. Country comes from the
+// edge (Cloudflare CF-IPCountry); see helpers/geo.ts and config GEO_*.
+const GEO_EXEMPT_PATHS = new Set(["/healthz", "/metrics"]);
+app.addHook("onRequest", async (req, reply) => {
+  if (GEO_EXEMPT_PATHS.has(req.routeOptions?.url ?? req.url)) return;
+  const decision = geoDecision(req, config);
+  if (decision.allowed) return;
+  metrics.geoBlocked.inc({ country: decision.country ?? "none", reason: decision.reason });
+  req.log.warn(
+    { country: decision.country, reason: decision.reason, path: req.url },
+    "geo_blocked",
+  );
+  return sendError(
+    reply,
+    new ApiException(
+      "REGION_BLOCKED",
+      "This service is not available in your region.",
+      "Access to perpetuals, spot, and prediction-market trading is restricted " +
+        "in the United States and sanctioned jurisdictions. If you believe this " +
+        "is an error, contact support — do not attempt to bypass this restriction.",
+    ),
+  );
 });
 
 // Request counts by route template (not raw URL — keeps label cardinality
