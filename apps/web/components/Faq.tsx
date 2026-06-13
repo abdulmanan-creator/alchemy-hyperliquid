@@ -48,6 +48,18 @@ const ITEMS: { q: string; a: React.ReactNode }[] = [
     q: "Do I need to share my private key?",
     a: "No. The SDK signs locally — either with a hot key you supply (kept in memory), an injected browser wallet, or a hardware signer. Alchemy receives signed payloads, never raw keys.",
   },
+  {
+    q: "Is this available in the United States?",
+    a: (
+      <>
+        No. Access is restricted in the United States and in sanctioned or
+        embargoed jurisdictions, and is enforced at the API — requests from
+        those regions are rejected. Using a VPN or otherwise misrepresenting
+        your location to evade the restriction is a violation of the{" "}
+        <Link href="/terms">Terms</Link>.
+      </>
+    ),
+  },
 ];
 
 export function Faq() {

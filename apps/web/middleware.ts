@@ -49,5 +49,5 @@ export function middleware(req: NextRequest): NextResponse {
 // Run on everything except Next internals, the restricted page itself, and
 // static assets — so the gate can't accidentally loop or block its own page.
 export const config = {
-  matcher: ["/((?!_next/|restricted|favicon|robots.txt|.*\\.(?:svg|png|jpg|jpeg|ico|webp|woff2?)$).*)"],
+  matcher: ["/((?!_next/|restricted|terms|favicon|robots.txt|.*\\.(?:svg|png|jpg|jpeg|ico|webp|woff2?)$).*)"],
 };

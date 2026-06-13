@@ -26,6 +26,27 @@ render.yaml     Render deploy config (two services)
 .env.example    Documented environment variables
 ```
 
+## Availability / jurisdiction
+
+The Service is **not available in the United States** or in sanctioned/embargoed
+jurisdictions. This is enforced two ways:
+
+- **API (authoritative):** a relay guard rejects requests from restricted
+  regions with `451 REGION_BLOCKED` before they reach any trading route. Country
+  comes from Cloudflare's `cf-ipcountry`; configure via `GEO_BLOCK_ENABLED`,
+  `RESTRICTED_COUNTRIES`, `GEO_COUNTRY_HEADER`, and `GEO_FAIL_CLOSED` (see
+  `.env.example`). Set `GEO_FAIL_CLOSED=true` in production and lock the origin
+  to Cloudflare so the raw origin URL can't bypass the gate.
+- **Web (disclosure + UX):** a footer notice and the `/terms` page disclose the
+  restriction and prohibit evasion; Next.js middleware rewrites restricted-region
+  visitors to `/restricted`.
+
+`/terms` ships with `[DATE]` / `[CONTACT EMAIL]` placeholders and is a starting
+draft — **have counsel review it before launch.** Country granularity is
+limited to ISO alpha-2 (no Ontario/`CA-ON` subdivision blocking — do that at the
+Cloudflare WAF if needed), and IP geo does not defeat a determined VPN; the ToS
+no-evasion clause is the backstop for that.
+
 ## Prerequisites
 
 1. **Node 20+** and **npm 10+**.

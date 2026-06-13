@@ -35,8 +35,8 @@ export default function RestrictedPage() {
         </p>
         <p style={{ color: "var(--fg-dim)", fontSize: 14, lineHeight: 1.6 }}>
           Attempting to bypass this restriction — for example with a VPN — is a
-          violation of our terms. If you reached this page in error, contact
-          support.
+          violation of our <a href="/terms">Terms</a>. If you reached this page
+          in error, contact support.
         </p>
       </div>
     </main>

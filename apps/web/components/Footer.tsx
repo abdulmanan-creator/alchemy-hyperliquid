@@ -16,6 +16,10 @@ export function Footer() {
               Foundation. Crypto trading involves risk of loss; this product is
               infrastructure, not investment advice.
             </p>
+            <p className="footer-disclaimer">
+              <strong>Not available in the United States</strong> or other
+              restricted/sanctioned jurisdictions. See <Link href="/terms">Terms</Link>.
+            </p>
           </div>
 
           <div className="footer-links">
@@ -25,6 +29,11 @@ export function Footer() {
               <a href="#quickstart">Quickstart</a>
               <Link href="/approve">Approve wallet</Link>
               <a href="#fees">Fees</a>
+            </div>
+            <div className="footer-col">
+              <span className="head">Legal</span>
+              <Link href="/terms">Terms of Service</Link>
+              <Link href="/terms#restricted">Availability</Link>
             </div>
             <div className="footer-col">
               <span className="head">Community</span>
