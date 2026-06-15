@@ -28,18 +28,22 @@ render.yaml     Render deploy config (two services)
 
 ## Availability / jurisdiction
 
-The Service is **not available in the United States** or in sanctioned/embargoed
-jurisdictions. This is enforced two ways:
+Trading is **not available in the United States** or in sanctioned/embargoed
+jurisdictions. We follow Hyperliquid's model: the interface and read-only market
+data stay viewable everywhere; only the connect/trade actions are blocked.
 
-- **API (authoritative):** a relay guard rejects requests from restricted
-  regions with `451 REGION_BLOCKED` before they reach any trading route. Country
-  comes from Cloudflare's `cf-ipcountry`; configure via `GEO_BLOCK_ENABLED`,
-  `RESTRICTED_COUNTRIES`, `GEO_COUNTRY_HEADER`, and `GEO_FAIL_CLOSED` (see
-  `.env.example`). Set `GEO_FAIL_CLOSED=true` in production and lock the origin
-  to Cloudflare so the raw origin URL can't bypass the gate.
-- **Web (disclosure + UX):** a footer notice and the `/terms` page disclose the
-  restriction and prohibit evasion; Next.js middleware rewrites restricted-region
-  visitors to `/restricted`.
+- **API (authoritative):** the geo guard rejects only the connect/trade routes
+  (`/exchange`, `/agent/exchange`, `/oauth/*-code`; see `GEO_RESTRICTED_ROUTES`
+  in `helpers/geo.ts`) with `451 REGION_BLOCKED` from restricted regions. Read
+  and market-data routes stay open. Country comes from Cloudflare's
+  `cf-ipcountry`; configure via `GEO_BLOCK_ENABLED`, `RESTRICTED_COUNTRIES`,
+  `GEO_COUNTRY_HEADER`, and `GEO_FAIL_CLOSED` (see `.env.example`). Set
+  `GEO_FAIL_CLOSED=true` in production and lock the origin to Cloudflare so the
+  raw origin URL can't bypass the gate.
+- **Web (disclosure + UX):** middleware stamps a `geo_restricted` cookie;
+  restricted visitors see a persistent top banner (`GeoBanner`), the `/approve`
+  connect button is disabled, and the footer + `/terms` page disclose the
+  restriction and prohibit evasion. The page itself stays fully viewable.
 
 `/terms` ships with `[DATE]` / `[CONTACT EMAIL]` placeholders and is a starting
 draft — **have counsel review it before launch.** Country granularity is

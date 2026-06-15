@@ -21,6 +21,29 @@ const TOR_COUNTRY = "T1";
 /** Cloudflare's code for "couldn't determine the country". */
 const UNKNOWN_COUNTRY = "XX";
 
+/**
+ * Routes that constitute "connecting / trading" — the surfaces a restricted
+ * jurisdiction may not use. Everything else (market data, approval-status
+ * reads, preflight) stays open so the interface remains viewable, mirroring how
+ * Hyperliquid serves its trade UI everywhere but blocks the connect/trade
+ * action. Matched against the Fastify route template, not the raw URL.
+ *
+ *   /exchange         build + send orders and approveBuilderFee (the connect step)
+ *   /agent/exchange   unattended agent trading
+ *   /oauth/*-code     mint/redeem the OAuth token that grants MCP trading access
+ */
+export const GEO_RESTRICTED_ROUTES: ReadonlySet<string> = new Set([
+  "/exchange",
+  "/agent/exchange",
+  "/oauth/issue-code",
+  "/oauth/exchange-code",
+]);
+
+/** True iff this route requires an allowed jurisdiction. */
+export function isGeoRestrictedRoute(routeUrl: string | undefined): boolean {
+  return routeUrl !== undefined && GEO_RESTRICTED_ROUTES.has(routeUrl);
+}
+
 export type GeoOutcome =
   | { allowed: true; country: string | null }
   | { allowed: false; country: string | null; reason: "restricted" | "tor" | "unknown" };

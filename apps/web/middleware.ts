@@ -2,16 +2,16 @@ import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 
 /**
- * UI-side jurisdiction gate.
+ * UI-side jurisdiction signal.
  *
- * This is UX only — the authoritative block lives on the API (the relay that
- * forwards signed orders; see apps/api/src/helpers/geo.ts). Here we just keep
- * restricted-region visitors from seeing a trading UI they can't use, by
- * rewriting them to /restricted.
+ * We do NOT block the page — restricted visitors should still be able to view
+ * the interface and read-only market data (Hyperliquid's model), and we need to
+ * be able to load the site for testing from a restricted IP. Instead we stamp a
+ * `geo_restricted` cookie that the client reads to show the banner (GeoBanner)
+ * and disable the connect entry. The authoritative block lives on the API,
+ * which rejects the trade/connection routes with 451 (apps/api/helpers/geo.ts).
  *
- * Country comes from the edge: Cloudflare's `cf-ipcountry` (the web app sits
- * behind the same CF zone as the relay), with a Vercel fallback. Unknown
- * country fails open — the API is the backstop.
+ * Country comes from the edge: Cloudflare's `cf-ipcountry`, Vercel fallback.
  */
 
 const DEFAULT_RESTRICTED = "US,CU,IR,KP,SY,RU";
@@ -27,7 +27,11 @@ function restrictedSet(): Set<string> {
 }
 
 export function middleware(req: NextRequest): NextResponse {
-  if (process.env.GEO_BLOCK_ENABLED === "false") return NextResponse.next();
+  const res = NextResponse.next();
+  if (process.env.GEO_BLOCK_ENABLED === "false") {
+    res.cookies.set("geo_restricted", "0", { path: "/", sameSite: "lax" });
+    return res;
+  }
 
   const country = (
     req.headers.get("cf-ipcountry") ??
@@ -38,16 +42,12 @@ export function middleware(req: NextRequest): NextResponse {
     .toUpperCase();
 
   const blocked = country === "T1" || (country !== "" && restrictedSet().has(country));
-  if (!blocked) return NextResponse.next();
-
-  const url = req.nextUrl.clone();
-  url.pathname = "/restricted";
-  url.search = "";
-  return NextResponse.rewrite(url);
+  res.cookies.set("geo_restricted", blocked ? "1" : "0", { path: "/", sameSite: "lax" });
+  if (country) res.cookies.set("geo_country", country, { path: "/", sameSite: "lax" });
+  return res;
 }
 
-// Run on everything except Next internals, the restricted page itself, and
-// static assets — so the gate can't accidentally loop or block its own page.
+// Stamp the cookie on page navigations; skip Next internals and static assets.
 export const config = {
-  matcher: ["/((?!_next/|restricted|terms|favicon|robots.txt|.*\\.(?:svg|png|jpg|jpeg|ico|webp|woff2?)$).*)"],
+  matcher: ["/((?!_next/|favicon|robots.txt|.*\\.(?:svg|png|jpg|jpeg|ico|webp|woff2?)$).*)"],
 };

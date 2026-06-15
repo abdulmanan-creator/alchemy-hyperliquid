@@ -9,7 +9,7 @@ import rateLimit from "@fastify/rate-limit";
 
 import { loadConfig } from "./config.js";
 import { ApiException, sendError } from "./errors.js";
-import { geoDecision } from "./helpers/geo.js";
+import { geoDecision, isGeoRestrictedRoute } from "./helpers/geo.js";
 import { metrics } from "./helpers/metrics.js";
 import { registerRoutes } from "./routes/index.js";
 
@@ -85,15 +85,14 @@ await app.register(rateLimit, {
   // see WRITE_RATE_LIMIT in routes/exchange.ts.
 });
 
-// Jurisdiction gate. Runs before any route handler so a restricted caller
-// never reaches a trading surface (the relay forwards signed orders, so this
-// is the load-bearing block — the web UI gate is UX only). Operational
-// endpoints stay open: /healthz and /metrics are hit by monitoring from
-// uncountried networks and must not be geo-blocked. Country comes from the
-// edge (Cloudflare CF-IPCountry); see helpers/geo.ts and config GEO_*.
-const GEO_EXEMPT_PATHS = new Set(["/healthz", "/metrics"]);
+// Jurisdiction gate. Blocks only the connect/trade routes (see
+// GEO_RESTRICTED_ROUTES) so the interface and read-only market data stay
+// available everywhere — Hyperliquid's model. The relay forwards signed orders,
+// so blocking these routes is the load-bearing compliance control; the web UI
+// banner + disabled connect button are disclosure/UX on top. Country comes from
+// the edge (Cloudflare CF-IPCountry); see helpers/geo.ts and config GEO_*.
 app.addHook("onRequest", async (req, reply) => {
-  if (GEO_EXEMPT_PATHS.has(req.routeOptions?.url ?? req.url)) return;
+  if (!isGeoRestrictedRoute(req.routeOptions?.url)) return;
   const decision = geoDecision(req, config);
   if (decision.allowed) return;
   metrics.geoBlocked.inc({ country: decision.country ?? "none", reason: decision.reason });

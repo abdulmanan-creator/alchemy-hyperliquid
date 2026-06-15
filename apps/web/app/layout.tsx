@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import type { ReactNode } from "react";
 
+import { GeoBanner } from "@/components/GeoBanner";
 import { Providers } from "./providers-client";
 import "./globals.css";
 
@@ -14,6 +15,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
   return (
     <html lang="en">
       <body>
+        <GeoBanner />
         <Providers>{children}</Providers>
       </body>
     </html>

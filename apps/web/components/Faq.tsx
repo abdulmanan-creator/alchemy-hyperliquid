@@ -52,11 +52,11 @@ const ITEMS: { q: string; a: React.ReactNode }[] = [
     q: "Is this available in the United States?",
     a: (
       <>
-        No. Access is restricted in the United States and in sanctioned or
-        embargoed jurisdictions, and is enforced at the API — requests from
-        those regions are rejected. Using a VPN or otherwise misrepresenting
-        your location to evade the restriction is a violation of the{" "}
-        <Link href="/terms">Terms</Link>.
+        You can view the interface and market data anywhere, but{" "}
+        <strong>connecting a wallet and trading are not available</strong> in the
+        United States or in sanctioned/embargoed jurisdictions — the API rejects
+        those requests. Using a VPN or otherwise misrepresenting your location to
+        evade the restriction is a violation of the <Link href="/terms">Terms</Link>.
       </>
     ),
   },

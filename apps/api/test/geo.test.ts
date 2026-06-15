@@ -14,7 +14,7 @@ import { describe, expect, it } from "vitest";
 
 import { loadConfig, type Config } from "../src/config.js";
 import { ApiException, sendError } from "../src/errors.js";
-import { geoDecision, resolveCountry } from "../src/helpers/geo.js";
+import { geoDecision, isGeoRestrictedRoute, resolveCountry } from "../src/helpers/geo.js";
 
 const baseEnv = {
   ALCHEMY_BUILDER_ADDRESS: "0xAAAA000000000000000000000000000000000001",
@@ -97,13 +97,27 @@ describe("geoDecision", () => {
   });
 });
 
+describe("isGeoRestrictedRoute", () => {
+  it("flags the connect/trade routes", () => {
+    expect(isGeoRestrictedRoute("/exchange")).toBe(true);
+    expect(isGeoRestrictedRoute("/agent/exchange")).toBe(true);
+    expect(isGeoRestrictedRoute("/oauth/issue-code")).toBe(true);
+  });
+
+  it("leaves read/market routes open", () => {
+    expect(isGeoRestrictedRoute("/markets")).toBe(false);
+    expect(isGeoRestrictedRoute("/l2Book")).toBe(false);
+    expect(isGeoRestrictedRoute("/approval")).toBe(false);
+    expect(isGeoRestrictedRoute(undefined)).toBe(false);
+  });
+});
+
 describe("onRequest guard (integration)", () => {
   async function buildApp(env: Record<string, string> = {}): Promise<FastifyInstance> {
     const config = cfg(env);
     const app = Fastify({ logger: false });
-    const exempt = new Set(["/healthz", "/metrics"]);
     app.addHook("onRequest", async (request, reply) => {
-      if (exempt.has(request.routeOptions?.url ?? request.url)) return;
+      if (!isGeoRestrictedRoute(request.routeOptions?.url)) return;
       const decision = geoDecision(request, config);
       if (decision.allowed) return;
       return sendError(
@@ -111,12 +125,12 @@ describe("onRequest guard (integration)", () => {
         new ApiException("REGION_BLOCKED", "This service is not available in your region.", "..."),
       );
     });
-    app.get("/healthz", async () => ({ ok: true }));
+    app.get("/markets", async () => ({ perps: [] }));
     app.post("/exchange", async () => ({ ok: true }));
     return app;
   }
 
-  it("returns 451 REGION_BLOCKED for a restricted region", async () => {
+  it("returns 451 REGION_BLOCKED on a trade route for a restricted region", async () => {
     const app = await buildApp();
     const res = await app.inject({
       method: "POST",
@@ -128,7 +142,7 @@ describe("onRequest guard (integration)", () => {
     expect(res.json().error).toBe("REGION_BLOCKED");
   });
 
-  it("lets a permitted region through", async () => {
+  it("lets a permitted region trade", async () => {
     const app = await buildApp();
     const res = await app.inject({
       method: "POST",
@@ -139,9 +153,9 @@ describe("onRequest guard (integration)", () => {
     expect(res.statusCode).toBe(200);
   });
 
-  it("never blocks the /healthz operational endpoint", async () => {
+  it("serves read/market routes even from a restricted region", async () => {
     const app = await buildApp();
-    const res = await app.inject({ method: "GET", url: "/healthz", headers: { "cf-ipcountry": "US" } });
+    const res = await app.inject({ method: "GET", url: "/markets", headers: { "cf-ipcountry": "US" } });
     expect(res.statusCode).toBe(200);
   });
 });

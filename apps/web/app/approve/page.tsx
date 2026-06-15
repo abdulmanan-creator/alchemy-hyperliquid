@@ -55,6 +55,7 @@ import type {
   SendResponse,
 } from "@alchemy-hl/sdk-preview";
 import { api, API_BASE_URL, BUILDER_ADDR } from "@/lib/api";
+import { useGeoRestricted } from "@/lib/geo";
 
 type Phase = "idle" | "building" | "signing" | "sending" | "refreshing";
 
@@ -65,6 +66,7 @@ interface ErrState {
 }
 
 export default function ApprovePage() {
+  const { restricted: geoRestricted } = useGeoRestricted();
   const { ready, authenticated, login, logout, user } = usePrivy();
   const { wallets } = useWallets();
   const { setActiveWallet } = useSetActiveWallet();
@@ -235,7 +237,7 @@ export default function ApprovePage() {
       <main className="approve-main">
         <div style={{ width: "100%", maxWidth: 520 }}>
           {stateName === "connect" && (
-            <ConnectCard onLogin={login} ready={ready} />
+            <ConnectCard onLogin={login} ready={ready} restricted={geoRestricted} />
           )}
           {stateName === "ready" && (
             <ReadyCard
@@ -347,7 +349,15 @@ function WalletChip({
   );
 }
 
-function ConnectCard({ onLogin, ready }: { onLogin: () => void; ready: boolean }) {
+function ConnectCard({
+  onLogin,
+  ready,
+  restricted,
+}: {
+  onLogin: () => void;
+  ready: boolean;
+  restricted: boolean;
+}) {
   return (
     <CardShell>
       <h1 className="approve-title">Connect to continue.</h1>
@@ -361,18 +371,29 @@ function ConnectCard({ onLogin, ready }: { onLogin: () => void; ready: boolean }
       <button
         className="btn btn-primary btn-block"
         onClick={onLogin}
-        disabled={!ready}
+        disabled={!ready || restricted}
         style={{ marginBottom: 14 }}
       >
-        {ready ? "Sign in" : "Initializing…"}
-        <svg className="btn-icon" viewBox="0 0 24 24" aria-hidden="true">
-          <path d="M5 12h14M13 6l6 6-6 6" />
-        </svg>
+        {restricted ? "Not available in your region" : ready ? "Sign in" : "Initializing…"}
+        {!restricted && (
+          <svg className="btn-icon" viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M5 12h14M13 6l6 6-6 6" />
+          </svg>
+        )}
       </button>
 
       <div className="explainer">
-        Connecting only reads your address. Approving the builder fee is a separate, single
-        signature you&apos;ll review on the next step.
+        {restricted ? (
+          <>
+            Connecting and trading are not available in the United States or other
+            restricted jurisdictions. See <Link href="/terms">Terms</Link>.
+          </>
+        ) : (
+          <>
+            Connecting only reads your address. Approving the builder fee is a separate, single
+            signature you&apos;ll review on the next step.
+          </>
+        )}
       </div>
 
       <div className="card-foot">
